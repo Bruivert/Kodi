@@ -160,7 +160,10 @@ def skin_builtins(rutas, preset_folder, now):
             'Skin.Reset(TMDbHelper.DisableRatings)',
             'RunScript(script.skinvariables,copy_menufolder=%s,skin=%s,force=True)' % (folder, SKIN),
             'Skin.SetString(Shortcuts.RebuildDateTime,%s)' % now,
-            'Skin.Reset(SetupWizard.Pending)']
+            'Skin.Reset(SetupWizard.Pending)',
+            # Lo mismo que hace la skin al volver al Inicio: reconstruye los menús con la fecha nueva.
+            'RunScript(script.skinvariables,"run_executebuiltin=special://skin/shortcuts/'
+            'skinvariables-build-templates.json",use_rules)']
     return out
 
 

@@ -105,6 +105,10 @@ def test_builtins_set_imdb_ratings_and_copy_preset():
     assert b.index(copy) < b.index('Skin.SetString(Shortcuts.RebuildDateTime,2026-11-16_10:00:00)')
     assert 'Skin.Reset(SetupWizard.Pending)' in b
     assert 'Skin.SetString(HomeSwitcher.1109.Type,Custom)' in b
+    rebuild = ('RunScript(script.skinvariables,"run_executebuiltin=special://skin/shortcuts/'
+               'skinvariables-build-templates.json",use_rules)')
+    assert b[-1] == rebuild
+    assert b.index('Skin.SetString(Shortcuts.RebuildDateTime,2026-11-16_10:00:00)') < b.index(rebuild)
 
 
 def test_builtins_spotlight_uses_palantir_and_resets_missing():

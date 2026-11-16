@@ -5,6 +5,13 @@ import re
 import xml.etree.ElementTree as ET
 
 TELEGRAM_RE = re.compile(r'(?:https?://)?((?:t|telegram)\.me/[A-Za-z0-9_+/\-]+)')
+SECRET_PARAM_RE = re.compile(
+    r'([?&](?:[^=&]*(?:code|codigo|token|key|pass|pin|auth|secret)[^=&]*)=)[^&]*', re.I)
+
+
+def redact(path):
+    """Tapa el valor de parámetros tipo code/token/key/pin en una ruta."""
+    return SECRET_PARAM_RE.sub(r'\1***', path or '')
 
 
 def find_telegram_links(text):
@@ -28,7 +35,7 @@ def _rutas_lines(rutas, prefix=''):
     lines = []
     for key, value in (rutas or {}).items():
         if isinstance(value, dict) and 'path' in value:
-            lines.append('  %s%s: %s  ->  %s' % (prefix, key, value.get('label', ''), value['path']))
+            lines.append('  %s%s: %s  ->  %s' % (prefix, key, value.get('label', ''), redact(value['path'])))
         elif isinstance(value, dict):
             lines += _rutas_lines(value, prefix + key + '.')
         elif key == 'id':
@@ -48,7 +55,7 @@ def build_report(info):
         out.append('  (no encontrado)')
     for name, rows in trees.items():
         out.append('[%s]' % name)
-        out += ['  %s%s  ->  %s' % ('  ' * depth, label, path) for depth, label, path in rows]
+        out += ['  %s%s  ->  %s' % ('  ' * depth, label, redact(path)) for depth, label, path in rows]
     out += ['', 'Enlaces de Telegram en BlackGhost:']
     out += ['  %s' % link for link in info.get('telegram') or []] or ['  (no encontrado)']
     out += ['', 'Nombres de ajustes de BlackGhost (sin valores):']
