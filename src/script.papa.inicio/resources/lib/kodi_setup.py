@@ -213,8 +213,14 @@ def run_discovery():
     return rutas
 
 
+# AF3 pone ReloadDone al acabar su rutina de arranque (shortcuts/skinvariables-startup.json).
+AF3_STARTED = '!String.IsEmpty(Window(Home).Property(ReloadDone)) + !Window.IsVisible(startup)'
+
+
 def af3_ready():
-    return xbmc.getSkinDir() == SKIN and xbmc.getCondVisibility('Skin.HasSetting(DefaultConfig.InitDone)')
+    # Ni DefaultConfig.InitDone (las recargas del primer arranque de AF3 pueden borrarlo) ni la ventana de Inicio
+    # (AF3 puede arrancar en un hub, como el 11107 de TV): con cualquiera de los dos el menú no llegaba nunca.
+    return xbmc.getSkinDir() == SKIN and xbmc.getCondVisibility(AF3_STARTED)
 
 
 def set_skin(skin_id):
@@ -242,12 +248,29 @@ def _wait_for_copy(timeout=15):
 
 
 def apply_skin_config():
+    """Aplica el preset. Devuelve False si skinvariables no llegó a copiar el menú."""
     now = time.strftime('%Y-%m-%d_%H:%M:%S')
-    for builtin in menus.skin_builtins(load_rutas(), PRESET, now):
+    first_run = not xbmc.getCondVisibility('Skin.HasSetting(DefaultConfig.InitDone)')
+    copied = True
+    for builtin in menus.skin_builtins(load_rutas(), PRESET, now, first_run):
         xbmc.executebuiltin(builtin, True)
         if 'copy_menufolder' in builtin:
-            _wait_for_copy()
+            copied = _wait_for_copy()
     xbmc.executebuiltin('Dialog.Close(1130,true)')
+    return copied
+
+
+def finish_pending(wait=lambda: False):
+    """Monta el menú que dejó pendiente el asistente en cuanto AF3 ha arrancado.
+    True = montado, False = falló la copia (sigue pendiente), None = nada que hacer todavía.
+    wait() deja que la skin termine de asentarse y devuelve True si Kodi se está cerrando."""
+    if not (pending() and af3_ready()) or wait():
+        return None
+    if not apply_skin_config():
+        return False
+    set_pending(False)
+    notify('Menú de papá listo')
+    return True
 
 
 def pending():

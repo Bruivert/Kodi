@@ -24,24 +24,24 @@ def configurar_todo():
     rutas = ks.run_discovery()
     dialog.ok(ks.TITLE, 'Esto es lo que he encontrado:\n' + ks.summary(rutas))
     ks.set_pending(True)
-    if ks.af3_ready():
-        ks.apply_skin_config()
-        ks.set_pending(False)
+    if ks.finish_pending():
         dialog.ok(ks.TITLE, 'Listo. Vuelve al Inicio para ver el nuevo menú.')
         return
+    if xbmc.getSkinDir() == ks.SKIN:
+        # Arctic Fuse 3 ya está puesta pero no ha terminado de arrancar: el servicio lo monta en cuanto pueda.
+        dialog.ok(ks.TITLE, 'El menú se terminará de montar solo en unos segundos. '
+                            'Si no aparece, reinicia Kodi.')
+        return
     dialog.ok(ks.TITLE, 'Ahora Kodi cambiará a la nueva skin. Cuando pregunte si quieres mantenerla, '
-                        'pulsa «Sí». Luego espera unos segundos en el Inicio: el menú se monta solo.')
+                        'pulsa «Sí». Luego espera unos segundos: el menú se monta solo.')
     ks.set_skin(ks.SKIN)
 
 
 def actualizar_menus():
     rutas = ks.run_discovery()
     xbmcgui.Dialog().ok(ks.TITLE, ks.summary(rutas))
-    if ks.af3_ready():
-        ks.apply_skin_config()
-        ks.notify('Menú actualizado')
-    else:
-        ks.set_pending(True)
+    ks.set_pending(True)
+    ks.finish_pending()  # si Arctic Fuse 3 aún no está lista, lo termina el servicio
 
 
 def cambiar_trailers():

@@ -61,6 +61,90 @@ def test_summary_when_addons_missing():
     assert 'Palantir: no encontrado' in text and 'BlackGhost: no encontrado' in text
 
 
+# Condiciones de Kodi que simulamos. Si el código pregunta otra (por ejemplo Window.IsVisible(home)), KeyError.
+CONDITIONS = {
+    'String.IsEmpty(Window(Home).Property(ReloadDone))': lambda s: not s.get('reload_done'),
+    'Window.IsVisible(startup)': lambda s: s.get('startup', False),
+    'Skin.HasSetting(DefaultConfig.InitDone)': lambda s: s.get('initdone', False),
+}
+
+# Como estaba la caja: AF3 arrancada en el hub de TV (11107) y sin DefaultConfig.InitDone.
+CAJA = {'reload_done': True, 'startup': False, 'initdone': False}
+
+
+def fake_kodi(monkeypatch, skin, state):
+    def cond(expr):
+        atoms = [a.strip() for a in expr.split('+')]
+        return all(CONDITIONS[a.lstrip('!')](state) != a.startswith('!') for a in atoms)
+    monkeypatch.setattr(ks.xbmc, 'getSkinDir', lambda: skin)
+    monkeypatch.setattr(ks.xbmc, 'getCondVisibility', cond)
+
+
+def test_af3_ready_once_its_startup_finished_even_without_initdone(monkeypatch):
+    fake_kodi(monkeypatch, ks.SKIN, CAJA)
+    assert ks.af3_ready()
+    fake_kodi(monkeypatch, ks.SKIN, dict(CAJA, startup=True))
+    assert not ks.af3_ready()
+    fake_kodi(monkeypatch, ks.SKIN, dict(CAJA, reload_done=False))
+    assert not ks.af3_ready()
+    fake_kodi(monkeypatch, 'skin.estuary', CAJA)
+    assert not ks.af3_ready()
+
+
+def fake_apply(monkeypatch, copied=True):
+    ran = []
+    monkeypatch.setattr(ks.xbmc, 'executebuiltin', lambda b, wait=False: ran.append(b))
+    monkeypatch.setattr(ks, 'load_rutas', lambda: {})
+    monkeypatch.setattr(ks, '_wait_for_copy', lambda: copied)
+    return ran
+
+
+def test_apply_finishes_af3_first_run_when_initdone_was_lost(monkeypatch):
+    fake_kodi(monkeypatch, ks.SKIN, CAJA)
+    ran = fake_apply(monkeypatch)
+    assert ks.apply_skin_config()
+    assert 'Skin.SetBool(DefaultConfig.InitDone)' in ran
+    fake_kodi(monkeypatch, ks.SKIN, dict(CAJA, initdone=True))
+    ran = fake_apply(monkeypatch)
+    ks.apply_skin_config()
+    assert 'Skin.SetBool(DefaultConfig.InitDone)' not in ran
+
+
+def fake_pending(monkeypatch):
+    flags = []
+    monkeypatch.setattr(ks, 'pending', lambda: True)
+    monkeypatch.setattr(ks, 'set_pending', flags.append)
+    monkeypatch.setattr(ks, 'notify', lambda msg: None)
+    return flags
+
+
+def test_finish_pending_applies_menu_from_any_af3_window(monkeypatch):
+    fake_kodi(monkeypatch, ks.SKIN, CAJA)
+    fake_apply(monkeypatch)
+    flags = fake_pending(monkeypatch)
+    assert ks.finish_pending()
+    assert flags == [False]
+
+
+def test_finish_pending_keeps_flag_when_copy_failed(monkeypatch):
+    fake_kodi(monkeypatch, ks.SKIN, CAJA)
+    fake_apply(monkeypatch, copied=False)
+    flags = fake_pending(monkeypatch)
+    assert ks.finish_pending() is False  # falló: el servicio cuenta el intento
+    assert flags == []
+
+
+def test_finish_pending_waits_for_af3(monkeypatch):
+    fake_kodi(monkeypatch, ks.SKIN, dict(CAJA, startup=True))
+    ran = fake_apply(monkeypatch)
+    flags = fake_pending(monkeypatch)
+    assert ks.finish_pending() is None  # nada que hacer todavía
+    assert ran == [] and flags == []
+    fake_kodi(monkeypatch, ks.SKIN, CAJA)
+    assert ks.finish_pending(wait=lambda: True) is None  # Kodi se cierra durante la espera
+    assert ran == [] and flags == []
+
+
 def test_service_starts_even_without_requests_module(monkeypatch):
     import importlib
     import sys
