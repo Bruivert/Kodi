@@ -78,16 +78,16 @@ def main():
     autoplay = TrailerAutoplay(xbmc.getInfoLabel, xbmc.getCondVisibility, PlayerAdapter(PapaPlayer()),
                                Resolver(), lambda: ks.setting('trailers_auto') != 'false', time.time)
     last_check = 0.0
+    fallos = 0  # cada intento recarga la skin: no insistir sin fin
     while not monitor.abortRequested():
         now = time.time()
         if now - last_check > 3:
             last_check = now
-            if ks.pending() and ks.af3_ready() and xbmc.getCondVisibility('Window.IsVisible(home)'):
-                if monitor.waitForAbort(3):  # deja que la skin termine de arrancar
-                    break
-                ks.apply_skin_config()
-                ks.set_pending(False)
-                ks.notify('Menú de papá listo')
+            if fallos < 3 and ks.finish_pending(lambda: monitor.waitForAbort(3)) is False:
+                fallos += 1
+                ks.log('el menú no se copió (intento %d)' % fallos)
+                if fallos == 3:
+                    ks.notify('No se pudo montar el menú. Reinicia Kodi.', 8000)
         try:
             autoplay.tick()
         except Exception as exc:  # un fallo de red o de un tráiler no debe tumbar el servicio

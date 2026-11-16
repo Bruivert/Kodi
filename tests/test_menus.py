@@ -115,17 +115,41 @@ def test_builtins_set_imdb_ratings_and_copy_preset():
     b = m.skin_builtins(RUTAS, 'special://profile/addon_data/script.papa.inicio/preset', '2026-11-16_10:00:00')
     assert 'Skin.SetString(CustomRating.Movies.Item01,IMDb)' in b
     assert 'Skin.SetString(CustomRating.TVShows.Item01,IMDb)' in b
-    assert 'Skin.Reset(TMDbHelper.DisableRatings)' in b
+    assert 'Skin.SetBool(TMDbHelper.DisableRatings,false)' in b
     copy = ('RunScript(script.skinvariables,copy_menufolder=special://profile/addon_data/'
             'script.papa.inicio/preset/,skin=skin.arctic.fuse.3,force=True)')
     assert copy in b
     assert b.index(copy) < b.index('Skin.SetString(Shortcuts.RebuildDateTime,2026-11-16_10:00:00)')
-    assert 'Skin.Reset(SetupWizard.Pending)' in b
+    assert 'Skin.SetBool(SetupWizard.Pending,false)' in b
     assert 'Skin.SetString(HomeSwitcher.1109.Type,Custom)' in b
     rebuild = ('RunScript(script.skinvariables,"run_executebuiltin=special://skin/shortcuts/'
                'skinvariables-build-templates.json",use_rules)')
     assert b[-1] == rebuild
     assert b.index('Skin.SetString(Shortcuts.RebuildDateTime,2026-11-16_10:00:00)') < b.index(rebuild)
+
+
+def test_builtins_never_reset_switches():
+    # Skin.Reset(x) solo limpia el texto x si existe uno con ese nombre y deja el interruptor x como estaba.
+    # En la caja el asistente de AF3 se quedaba "pendiente" para siempre por eso.
+    b = m.skin_builtins(RUTAS, 'x/', 'now', first_run=True)
+    switches = ('SetupWizard.Pending', 'TMDbHelper.DisableRatings', 'DefaultConfig.InitDone')
+    assert not [s for s in b if s.startswith('Skin.Reset(') and s[11:-1] in switches]
+
+
+def test_builtins_name_home_inicio():
+    # AF3 guarda "$LOCALIZE[10000]" tal cual y lo enseña así en el menú.
+    assert 'Skin.SetString(HomeSwitcher.Home.Name,Inicio)' in m.skin_builtins(RUTAS, 'x/', 'now')
+
+
+def test_builtins_finish_af3_first_run_only_when_it_did_not():
+    copy = 'RunScript(script.skinvariables,copy_menufolder=x/,skin=skin.arctic.fuse.3,force=True)'
+    b = m.skin_builtins(RUTAS, 'x/', 'now', first_run=True)
+    assert 'Skin.SetBool(DefaultConfig.InitDone)' in b
+    assert 'Skin.SetBool(TMDbHelper.Service)' in b
+    assert b.index('Skin.SetBool(DefaultConfig.InitDone)') < b.index(copy)
+    normal = m.skin_builtins(RUTAS, 'x/', 'now')
+    assert 'Skin.SetBool(DefaultConfig.InitDone)' not in normal
+    assert 'Skin.SetBool(TMDbHelper.Service)' not in normal
 
 
 def test_builtins_spotlight_uses_palantir_and_resets_missing():

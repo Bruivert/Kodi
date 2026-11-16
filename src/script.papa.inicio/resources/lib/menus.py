@@ -37,6 +37,20 @@ HUB_TYPES = [
 
 SPOTLIGHT_KEYS = ['Path', 'Target', 'Label', 'SortMethod', 'SortOrder', 'Limit']
 
+# Lo que hace AF3 en su primer arranque (shortcuts/skinvariables-startup.json), menos abrir su asistente y poner
+# su destacado de Inicio. Si las recargas de skin del primer arranque se lo comen, lo terminamos nosotros; si no,
+# AF3 lo repetiría en el siguiente arranque y sacaría su asistente encima del menú.
+AF3_FIRST_RUN = [
+    'Skin.SetBool(TMDbHelper.EnableData)',
+    'Skin.SetBool(TMDbHelper.EnableCrop)',
+    'Skin.SetBool(TMDbHelper.EnableBlur)',
+    'Skin.SetBool(TMDbHelper.Service)',
+    'Skin.SetString(Background.DialogImage,Adaptive)',
+    'Skin.SetString(Background.Image,special://skin/extras/backgrounds/blur/purple_blur.jpg)',
+    'Skin.SetString(HomeSwitcher.Home.Shortcut.Path,ActivateWindow(1181))',
+    'Skin.SetBool(DefaultConfig.InitDone)',
+]
+
 # Secciones con línea de botones bajo el menú (saltar a un deporte sin bajar 8 filas).
 SUBMENU = {'1104'}
 
@@ -143,10 +157,12 @@ def _spotlight(window, item, label):
     return out
 
 
-def skin_builtins(rutas, preset_folder, now):
+def skin_builtins(rutas, preset_folder, now, first_run=False):
     pel, ser, agenda, _ = _parts(rutas)
     folder = preset_folder if preset_folder.endswith('/') else preset_folder + '/'
-    out = []
+    out = list(AF3_FIRST_RUN) if first_run else []
+    # AF3 guarda "$LOCALIZE[10000]" sin traducir y el menú lo enseña tal cual.
+    out.append('Skin.SetString(HomeSwitcher.Home.Name,Inicio)')
     for win, kind, mode in HUB_TYPES:
         out += ['Skin.SetString(HomeSwitcher.%s.Type,%s)' % (win, kind),
                 'Skin.SetString(HomeSwitcher.%s.Mode,%s)' % (win, mode)]
@@ -156,12 +172,13 @@ def skin_builtins(rutas, preset_folder, now):
     out += _spotlight('1103', _first(pel, 'estrenos') or _first(ser, 'novedades', 'emision'), 'Novedades')
     out += _spotlight('1104', agenda, 'Agenda de hoy')
     out += _spotlight('1109', None, '')
+    # Interruptores con SetBool(…,false): Skin.Reset(x) se queda en el texto x si existe y no apaga el interruptor.
     out += ['Skin.SetString(CustomRating.Movies.Item01,IMDb)',
             'Skin.SetString(CustomRating.TVShows.Item01,IMDb)',
-            'Skin.Reset(TMDbHelper.DisableRatings)',
+            'Skin.SetBool(TMDbHelper.DisableRatings,false)',
             'RunScript(script.skinvariables,copy_menufolder=%s,skin=%s,force=True)' % (folder, SKIN),
             'Skin.SetString(Shortcuts.RebuildDateTime,%s)' % now,
-            'Skin.Reset(SetupWizard.Pending)',
+            'Skin.SetBool(SetupWizard.Pending,false)',
             # Lo mismo que hace la skin al volver al Inicio: reconstruye los menús con la fecha nueva.
             'RunScript(script.skinvariables,"run_executebuiltin=special://skin/shortcuts/'
             'skinvariables-build-templates.json",use_rules)']
