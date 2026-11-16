@@ -18,6 +18,7 @@ def configurar_todo():
         return
     if not ks.ensure_addon(ks.YOUTUBE, timeout=300):
         dialog.ok(ks.TITLE, 'No se instaló YouTube: sin él no habrá tráileres. Lo demás sigue igual.')
+    ks.apply_patches()  # tráileres sin cortes y filas que se atenúan mientras suenan
     ks.ensure_spanish()
     ks.ask_keys()
     ks.apply_tmdbhelper()

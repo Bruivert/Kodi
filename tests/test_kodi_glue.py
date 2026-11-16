@@ -152,3 +152,39 @@ def test_service_starts_even_without_requests_module(monkeypatch):
     sys.modules.pop('service', None)
     service = importlib.import_module('service')
     assert callable(service.http_get)
+
+
+from resources.lib import patches as pt  # noqa: E402
+from tests.test_patches import AF3, YOUTUBE  # noqa: E402
+
+YT_PATH = 'special://home/addons/plugin.video.youtube/' + pt.YOUTUBE_FILE
+AF3_PATH = 'special://home/addons/skin.arctic.fuse.3/' + pt.AF3_FILE
+
+
+def fake_addons(monkeypatch, files, versions):
+    written = {}
+    monkeypatch.setattr(ks, 'has_addon', lambda a: a in versions)
+    monkeypatch.setattr(ks, 'addon_version', lambda a: versions.get(a, ''))
+    monkeypatch.setattr(ks, 'read_file', lambda p: written.get(p, files.get(p, '')))
+    monkeypatch.setattr(ks, 'write_file', lambda p, t: written.__setitem__(p, t))
+    monkeypatch.setattr(ks.xbmcvfs, 'exists', lambda p: p in files or p in written)
+    monkeypatch.setattr(ks, 'log', lambda msg: None)
+    return written
+
+
+def test_apply_patches_fixes_youtube_and_skin_keeping_the_originals(monkeypatch):
+    files = {YT_PATH: YOUTUBE, AF3_PATH: AF3}
+    written = fake_addons(monkeypatch, files, {'plugin.video.youtube': '7.4.4', 'skin.arctic.fuse.3': '3.5.2'})
+    assert ks.apply_patches() == ['plugin.video.youtube', 'skin.arctic.fuse.3']
+    assert written[YT_PATH] == pt.patch_youtube(YOUTUBE)
+    assert written[AF3_PATH] == pt.patch_af3_rows(AF3)
+    backups = {p: t for p, t in written.items() if p.startswith(ks.BACKUP)}
+    assert sorted(backups.values()) == sorted([YOUTUBE, AF3])
+    assert any('plugin.video.youtube-7.4.4' in p for p in backups)
+    assert ks.apply_patches() == []  # ya aplicados: no se toca nada más
+
+
+def test_apply_patches_leaves_fixed_youtube_versions_and_missing_addons_alone(monkeypatch):
+    written = fake_addons(monkeypatch, {YT_PATH: YOUTUBE}, {'plugin.video.youtube': '7.4.5'})
+    assert ks.apply_patches() == []
+    assert written == {}

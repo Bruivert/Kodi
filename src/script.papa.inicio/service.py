@@ -5,10 +5,12 @@ import json
 import time
 
 import xbmc
+import xbmcgui
+import xbmcvfs
 
 from resources.lib import kodi_setup as ks
-from resources.lib import trailers
-from resources.lib.trailer_service import TrailerAutoplay
+from resources.lib import patches, trailers
+from resources.lib.trailer_service import LogWatch, TrailerAutoplay
 
 
 class PapaPlayer(xbmc.Player):
@@ -35,6 +37,33 @@ class PlayerAdapter(object):
 
     def started_count(self):
         return self.player.count
+
+    def position(self):
+        try:
+            return self.player.getTime()
+        except RuntimeError:  # ya no hay nada reproduciéndose
+            return 0.0
+
+    def duration(self):
+        try:
+            return self.player.getTotalTime()
+        except RuntimeError:
+            return 0.0
+
+    def playing_file(self):
+        try:
+            return self.player.getPlayingFile()  # p. ej. …/youtube/manifest/dash?file=<vídeo>.mpd
+        except RuntimeError:
+            return ''
+
+
+def dim_rows(on):
+    # La skin, con el arreglo de patches.py, atenúa las filas de carátulas mientras esta propiedad vale 1.
+    home = xbmcgui.Window(10000)
+    if on:
+        home.setProperty(patches.TRAILER_PROPERTY, '1')
+    else:
+        home.clearProperty(patches.TRAILER_PROPERTY)
 
 
 HEADERS = {'Accept': 'application/json', 'User-Agent': 'KodiPapa/1.0'}
@@ -75,8 +104,15 @@ class Resolver(object):
 
 def main():
     monitor = xbmc.Monitor()
+    try:  # tras actualizarse YouTube o la skin, se vuelven a aplicar los arreglos (la skin, al siguiente arranque)
+        ks.apply_patches()
+    except Exception as exc:
+        ks.log('arreglos: %s' % exc)
+    dim_rows(False)
     autoplay = TrailerAutoplay(xbmc.getInfoLabel, xbmc.getCondVisibility, PlayerAdapter(PapaPlayer()),
-                               Resolver(), lambda: ks.setting('trailers_auto') != 'false', time.time)
+                               Resolver(), lambda: ks.setting('trailers_auto') != 'false', time.time,
+                               watch=LogWatch(xbmcvfs.translatePath('special://logpath/kodi.log')),
+                               close_error=lambda: xbmc.executebuiltin('Dialog.Close(okdialog)'), dim=dim_rows)
     last_check = 0.0
     fallos = 0  # cada intento recarga la skin: no insistir sin fin
     while not monitor.abortRequested():
