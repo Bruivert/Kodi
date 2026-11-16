@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="repository.papa" name="Repo Kodi de Papá" version="1.0.0" provider-name="Bruivert">
+    <extension point="xbmc.addon.repository" name="Repo Kodi de Papá">
+        <dir>
+            <info compressed="false">https://bruivert.github.io/Kodi/zips/addons.xml</info>
+            <checksum>https://bruivert.github.io/Kodi/zips/addons.xml.md5</checksum>
+            <datadir zip="true">https://bruivert.github.io/Kodi/zips/</datadir>
+        </dir>
+        <dir minversion="20.9.1">
+            <info compressed="false">https://raw.githubusercontent.com/jurialmunkey/repository.jurialmunkey/master/omega/zips/addons.xml</info>
+            <checksum>https://raw.githubusercontent.com/jurialmunkey/repository.jurialmunkey/master/omega/zips/addons.xml.md5</checksum>
+            <datadir zip="true">https://raw.githubusercontent.com/jurialmunkey/repository.jurialmunkey/master/omega/zips/</datadir>
+        </dir>
+    </extension>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="es_ES">Repositorio del Kodi de Papá (incluye las skins de jurialmunkey para Omega).</summary>
+        <summary lang="en_GB">Kodi de Papá repository (includes jurialmunkey's Omega skins).</summary>
+        <description lang="es_ES">Instala desde aquí «Kodi de Papá — Asistente». Las actualizaciones llegan solas.</description>
+        <platform>all</platform>
+        <assets>
+            <icon>icon.png</icon>
+        </assets>
+    </extension>
+</addon>
