@@ -72,8 +72,25 @@ def test_sports_rows_follow_dad_order_with_agenda_first():
 def test_movies_rows_are_posters_from_palantir():
     rows = m.build_preset(RUTAS)[f('1101widgets')]
     assert [(r['label'], r['path']) for r in rows] == [
-        ('Estrenos', PAL + 'p_new'), ('Populares', PAL + 'p_pop'), ('Mejor valoradas', PAL + 'p_top')]
-    assert all(r['widget_style'] == 'Poster' and r['target'] == 'videos' for r in rows)
+        ('Estrenos', PAL + 'p_new'), ('Populares', PAL + 'p_pop'), ('Mejor valoradas', PAL + 'p_top'),
+        ('Géneros', PAL + 'p_gen')]
+    assert all(r['widget_style'] == 'Poster' and r['target'] == 'videos' for r in rows[:3])
+    assert 'widget_style' not in rows[3]
+
+
+def test_submenus_only_in_deportes():
+    files = m.build_preset(RUTAS)
+    for win in ('1101', '1102', '1103', '1109'):
+        assert files[f('%ssubmenu' % win)] == [], win
+    assert [s['path'] for s in files[f('1104submenu')]] == [r['path'] for r in files[f('1104widgets')]]
+
+
+def test_series_generos_row_last_only_when_palantir_has_it():
+    rutas = json.loads(json.dumps(RUTAS))
+    rutas['palantir']['series']['generos'] = it('Géneros', PAL + 's_gen')
+    rows = m.build_preset(rutas)[f('1102widgets')]
+    assert (rows[-1]['label'], rows[-1]['path']) == ('Géneros', PAL + 's_gen')
+    assert 'Géneros' not in [r['label'] for r in m.build_preset(RUTAS)[f('1102widgets')]]
 
 
 def test_missing_sport_has_no_row():

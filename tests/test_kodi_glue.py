@@ -52,7 +52,7 @@ def test_summary_counts_rows_and_names_sports():
                           'series': {'novedades': {}, 'emision': {}}},
              'blackghost': {'agenda': {'path': 'x'}, 'deportes': {'futbol': {}, 'ufc': {}}}}
     text = ks.summary(rutas)
-    assert 'Películas: 3 filas' in text and 'Series: 2 filas' in text
+    assert 'Películas: 4 filas' in text and 'Series: 2 filas' in text
     assert 'Deportes: Agenda de hoy, Fútbol, UFC' in text
 
 

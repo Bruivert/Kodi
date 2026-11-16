@@ -181,8 +181,8 @@ def summary(rutas):
     pal = rutas.get('palantir')
     if pal:
         lines.append('Palantir: Películas: %d filas · Series: %d filas' % (
-            len([k for k in pal.get('peliculas', {}) if k != 'generos']),
-            len([k for k in pal.get('series', {}) if k != 'generos'])))
+            len(pal.get('peliculas', {})),
+            len(pal.get('series', {}))))
     else:
         lines.append('Palantir: no encontrado')
     bg = rutas.get('blackghost')

@@ -37,6 +37,9 @@ HUB_TYPES = [
 
 SPOTLIGHT_KEYS = ['Path', 'Target', 'Label', 'SortMethod', 'SortOrder', 'Limit']
 
+# Secciones con línea de botones bajo el menú (saltar a un deporte sin bajar 8 filas).
+SUBMENU = {'1104'}
+
 
 def icon(name):
     return 'special://skin/extras/icons/%s.png' % name
@@ -73,11 +76,12 @@ def _sections(rutas):
     def pick(group, spec, style):
         return [(label, group[k]['path'], ico, style) for k, label, ico in spec if k in group]
 
+    generos = [('generos', 'Géneros', 'genre')]
     pel_rows = pick(pel, [('estrenos', 'Estrenos', 'recentlyadded'), ('populares', 'Populares', 'fire-flame-curved'),
-                          ('valoradas', 'Mejor valoradas', 'star')], 'Poster')
+                          ('valoradas', 'Mejor valoradas', 'star')], 'Poster') + pick(pel, generos, None)
     ser_rows = pick(ser, [('novedades', 'Nuevos episodios', 'recentlyadded'), ('emision', 'En emisión', 'tv'),
                           ('populares', 'Populares', 'fire-flame-curved'), ('valoradas', 'Mejor valoradas', 'star')],
-                    'Poster')
+                    'Poster') + pick(ser, generos, None)
     nov_rows = []
     if 'estrenos' in pel:
         nov_rows.append(('Estrenos de cine', pel['estrenos']['path'], 'film', 'Poster'))
@@ -90,26 +94,23 @@ def _sections(rutas):
     for k in ORDEN_DEPORTES:
         if k in dep:
             dep_rows.append((DEPORTES[k]['label'], dep[k]['path'], ICONOS_DEPORTES[k], None))
-    return {
-        '1101': (pel_rows, pick(pel, [('generos', 'Géneros', 'genre')], None)),
-        '1102': (ser_rows, pick(ser, [('generos', 'Géneros', 'genre')], None)),
-        '1103': (nov_rows, []),
-        '1104': (dep_rows, []),
-    }
+    return {'1101': pel_rows, '1102': ser_rows, '1103': nov_rows, '1104': dep_rows}
 
 
 def build_preset(rutas):
     files = {}
     sections = _sections(rutas)
-    enabled = {'1109'} | {w for w, (rows, _) in sections.items() if rows}
+    enabled = {'1109'} | {w for w, rows in sections.items() if rows}
     files[FILE % 'hubs'] = [
         {'label': label, 'icon': icon(ico), 'path': '', 'target': '', 'window': win, 'slot': slot,
          'disabled': '' if win in enabled else 'True'}
         for win, slot, label, ico in HUBS
     ]
-    for win, (rows, extra) in sections.items():
+    for win, rows in sections.items():
         files[FILE % ('%swidgets' % win)] = [_row(label, path, style) for label, path, _, style in rows]
-        files[FILE % ('%ssubmenu' % win)] = [_link(label, path, ico) for label, path, ico, _ in rows + extra]
+        # Botones bajo el menú solo donde ahorran camino (Deportes); en el resto repetirían las filas.
+        submenu = rows if win in SUBMENU else []
+        files[FILE % ('%ssubmenu' % win)] = [_link(label, path, ico) for label, path, ico, _ in submenu]
     files[FILE % '1109widgets'] = [_row('Mis favoritos', FAVOURITES)]
     files[FILE % '1109submenu'] = []
 
