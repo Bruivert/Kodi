@@ -67,3 +67,11 @@ def test_report_redacts_tree_and_rutas_paths():
             'rutas': {'blackghost': {'deportes': {'futbol': {'label': 'Fútbol', 'path': 'plugin://bg/?pin=99'}}}}}
     text = dg.build_report(info)
     assert '4455' not in text and 'pin=99' not in text
+
+
+def test_should_walk_skips_search_settings_and_login_folders():
+    for label in ['[B]Buscar[/B]', 'Búsqueda', 'Ajustes', 'Configuración', 'Herramientas', 'Mi cuenta',
+                  'Iniciar sesión', 'Search', 'Settings']:
+        assert not dg.should_walk(label), label
+    for label in ['Películas', 'Deportes', 'Fútbol', 'Series']:
+        assert dg.should_walk(label), label

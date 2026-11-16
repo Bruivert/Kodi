@@ -4,6 +4,8 @@ claves ni códigos: solo nombres, rutas y versiones. Puro: sin Kodi."""
 import re
 import xml.etree.ElementTree as ET
 
+from resources.lib.discover import matches
+
 TELEGRAM_RE = re.compile(r'(?:https?://)?((?:t|telegram)\.me/[A-Za-z0-9_+/\-]+)')
 SECRET_PARAM_RE = re.compile(
     r'([?&](?:[^=&]*(?:code|codigo|token|key|pass|pin|auth|secret)[^=&]*)=)[^&]*', re.I)
@@ -12,6 +14,15 @@ SECRET_PARAM_RE = re.compile(
 def redact(path):
     """Tapa el valor de parámetros tipo code/token/key/pin en una ruta."""
     return SECRET_PARAM_RE.sub(r'\1***', path or '')
+
+
+NO_WALK = ['buscar', 'busqueda', 'search', 'ajuste', 'configuracion', 'settings', 'herramienta', 'tools',
+           'cuenta', 'account', 'iniciar sesion', 'login']
+
+
+def should_walk(label):
+    """Carpetas que no se deben abrir al recorrer un addon (abren teclados o ajustes)."""
+    return not matches(label, NO_WALK)
 
 
 def find_telegram_links(text):

@@ -9,6 +9,7 @@ from resources.lib.trailers import youtube_url
 WINDOWS = ('home', '1101', '1102', '1103', '1104', '1109')
 KINDS = {'movie': 'movie', 'tvshow': 'tv'}
 DELAY = 4.0
+GRACE = 15.0  # si nuestro tráiler no ha empezado en este tiempo, lo damos por fallido
 
 
 class TrailerAutoplay(object):
@@ -19,8 +20,11 @@ class TrailerAutoplay(object):
         self.since = 0.0
         self.done_for = None
         self.expect = None  # nº de reproducciones que habrá cuando empiece nuestro tráiler
+        self.requested_at = 0.0
 
     def _focus(self):
+        if self.cond('System.HasActiveModalDialog'):
+            return None
         if not any(self.cond('Window.IsActive(%s)' % w) for w in WINDOWS):
             return None
         kind = KINDS.get(self.info('ListItem.DBType'))
@@ -41,6 +45,9 @@ class TrailerAutoplay(object):
 
     def tick(self):
         focus, now = self._focus(), self.clock()
+        if (self.expect is not None and now - self.requested_at > GRACE
+                and self.player.started_count() < self.expect):
+            self.expect = None  # YouTube no llegó a reproducirlo
         if focus != self.focus:
             self.focus, self.since, self.done_for = focus, now, None
             self._stop_ours()
@@ -55,4 +62,4 @@ class TrailerAutoplay(object):
             return
         before = self.player.started_count()
         self.player.play(youtube_url(key))
-        self.expect = before + 1
+        self.expect, self.requested_at = before + 1, now

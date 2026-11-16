@@ -3,7 +3,6 @@
 tráileres automáticos de España."""
 import json
 import time
-from urllib.request import Request, urlopen
 
 import xbmc
 
@@ -38,9 +37,22 @@ class PlayerAdapter(object):
         return self.player.count
 
 
+HEADERS = {'Accept': 'application/json', 'User-Agent': 'KodiPapa/1.0'}
+
+
 def http_get(url):
-    request = Request(url, headers={'Accept': 'application/json', 'User-Agent': 'KodiPapa/1.0'})
-    with urlopen(request, timeout=5) as response:
+    # requests trae sus certificados (certifi): el Python de Kodi en Android a veces no tiene los del sistema.
+    # Se importa aquí para que, si faltara, solo se pierdan los tráileres y no el resto del servicio.
+    try:
+        import requests
+    except ImportError:
+        requests = None
+    if requests is not None:
+        response = requests.get(url, headers=HEADERS, timeout=5)
+        response.raise_for_status()
+        return response.json()
+    from urllib.request import Request, urlopen
+    with urlopen(Request(url, headers=HEADERS), timeout=5) as response:
         return json.loads(response.read().decode('utf-8'))
 
 

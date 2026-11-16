@@ -33,7 +33,7 @@ def test_addon_xml_declares_script_and_service_for_omega():
     assert points['xbmc.python.script'] == 'default.py'
     assert points['xbmc.service'] == 'service.py'
     imports = {i.get('addon'): i.get('version') for i in root.iter('import')}
-    assert imports == {'xbmc.python': '3.0.1'}
+    assert imports == {'xbmc.python': '3.0.1', 'script.module.requests': '2.22.0'}
 
 
 def test_settings_have_keys_and_trailer_switch():
@@ -59,3 +59,12 @@ def test_summary_counts_rows_and_names_sports():
 def test_summary_when_addons_missing():
     text = ks.summary({})
     assert 'Palantir: no encontrado' in text and 'BlackGhost: no encontrado' in text
+
+
+def test_service_starts_even_without_requests_module(monkeypatch):
+    import importlib
+    import sys
+    monkeypatch.setitem(sys.modules, 'requests', None)  # import requests -> ImportError
+    sys.modules.pop('service', None)
+    service = importlib.import_module('service')
+    assert callable(service.http_get)

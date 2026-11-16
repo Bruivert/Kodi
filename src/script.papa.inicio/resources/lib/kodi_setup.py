@@ -274,7 +274,7 @@ def _tree(root, depth=2, limit=30):
     def walk(path, level):
         for e in list_dir(path)[:limit]:
             rows.append((level, discover.clean(e['label']), e['file']))
-            if e['filetype'] == 'directory' and level + 1 < depth:
+            if e['filetype'] == 'directory' and level + 1 < depth and diagnostico.should_walk(e['label']):
                 walk(e['file'], level + 1)
 
     walk(root, 0)

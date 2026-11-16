@@ -65,6 +65,12 @@ def test_repository_points_to_pages_and_jurialmunkey_omega():
     assert dirs[1].get('minversion') == '20.9.1'
     assert dirs[1].find('datadir').text == jm
     assert dirs[1].find('info').text == jm + 'addons.xml'
+    # Arctic Fuse 3 needs resource.images.arctic.* which live in jurialmunkey's version-agnostic repo/zips
+    common = 'https://raw.githubusercontent.com/jurialmunkey/repository.jurialmunkey/master/repo/zips/'
+    assert dirs[2].get('minversion') is None
+    assert dirs[2].find('datadir').text == common
+    assert dirs[2].find('info').text == common + 'addons.xml'
+    assert dirs[2].find('checksum').text == common + 'addons.xml.md5'
 
 
 def test_make_icon_writes_valid_png(tmp_path):

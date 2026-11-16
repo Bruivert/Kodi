@@ -138,3 +138,26 @@ def test_focus_moved_while_resolving_plays_nothing():
     s, k, p, _ = make(on_resolve=move)
     run(s, k, 5)
     assert p.played == []
+
+
+def test_failed_trailer_is_forgotten_so_a_later_movie_is_never_stopped():
+    s, k, p, _ = make()
+    p.play = lambda url: p.played.append(url)  # YouTube fails: nothing starts
+    run(s, k, 5)
+    assert p.played and p.starts == 0
+    run(s, k, 20)  # grace period passes with nothing playing
+    p.starts, p.playing = 1, True  # dad's movie starts (windowed) while focus stays
+    k.labels['ListItem.Title'] = 'Otra'
+    s.tick()
+    assert p.stopped == 0
+
+
+def test_modal_dialog_stops_trailer_and_blocks_new_ones():
+    s, k, p, _ = make()
+    run(s, k, 5)
+    k.conds['System.HasActiveModalDialog'] = True  # e.g. context menu "Añadir a favoritos"
+    s.tick()
+    assert p.stopped == 1
+    p.played.clear()
+    run(s, k, 10)
+    assert p.played == []
