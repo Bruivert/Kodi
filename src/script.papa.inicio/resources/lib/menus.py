@@ -212,6 +212,9 @@ def skin_builtins(rutas, preset_folder, now, first_run=False):
     out += ['Skin.SetString(CustomRating.Movies.Item01,IMDb)',
             'Skin.SetString(CustomRating.TVShows.Item01,IMDb)',
             'Skin.SetBool(TMDbHelper.DisableRatings,false)',
+            # Con la lupa: el menú circular de AF3 exige quitarla y hace falta para buscar películas y series.
+            'Skin.SetBool(HomeSwitcher.LoopBack,false)',
+            'Skin.SetBool(HomeSwitcher.DisableSearch,false)',
             'RunScript(script.skinvariables,copy_menufolder=%s,skin=%s,force=True)' % (folder, SKIN),
             'Skin.SetString(Shortcuts.RebuildDateTime,%s)' % now,
             'Skin.SetBool(SetupWizard.Pending,false)',

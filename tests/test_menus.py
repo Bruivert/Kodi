@@ -247,3 +247,10 @@ def test_saved_trakt_only_lists_are_left_out():
     b = m.skin_builtins(rutas, 'x/', 'now')
     assert not [x for x in b if 'p_most' in x or 's_most' in x]
     assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Label,Estrenos)' in b
+
+
+def test_menu_keeps_the_search_icon():
+    # El menú circular de AF3 (Favoritos a la izquierda de Inicio) exige quitar la lupa, y hace falta para buscar.
+    b = m.skin_builtins(RUTAS, 'x/', 'now')
+    assert 'Skin.SetBool(HomeSwitcher.DisableSearch,false)' in b
+    assert 'Skin.SetBool(HomeSwitcher.LoopBack,false)' in b
