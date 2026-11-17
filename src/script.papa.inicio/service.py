@@ -9,7 +9,7 @@ import xbmcgui
 import xbmcvfs
 
 from resources.lib import kodi_setup as ks
-from resources.lib import patches, trailers
+from resources.lib import arte_deportes, filas, patches, trailers
 from resources.lib.trailer_service import LogWatch, TrailerAutoplay
 
 
@@ -101,6 +101,17 @@ def http_post(url, payload):
     return http_get(url, payload)
 
 
+class PapaMonitor(xbmc.Monitor):
+    """Avisa cuando cambian los ajustes del asistente (p. ej. un código nuevo de BlackGhost)."""
+
+    def __init__(self):
+        super(PapaMonitor, self).__init__()
+        self.settings_changed = False
+
+    def onSettingsChanged(self):
+        self.settings_changed = True
+
+
 class Resolver(object):
     def __init__(self):
         self.cache = {}
@@ -137,10 +148,11 @@ class Resolver(object):
 
 
 def main():
-    monitor = xbmc.Monitor()
+    monitor = PapaMonitor()
     try:
         ks.apply_youtube_settings()
         ks.refresh_menu_if_outdated()
+        ks.sync_bg_code()
     except Exception as exc:
         ks.log('arreglos: %s' % exc)
     dim_rows(False)
@@ -150,12 +162,25 @@ def main():
                                close_error=lambda: xbmc.executebuiltin('Dialog.Close(okdialog)'), dim=dim_rows)
     # Tras actualizarse YouTube o la skin (también con Kodi encendido) se vuelven a aplicar los arreglos.
     keeper = patches.PatchKeeper(ks.apply_patches, xbmc.getCondVisibility, reload_skin, time.time, ks.SKIN)
+    # Copias de las filas de Palantir: se renuevan de una en una cuando nadie usa el mando ni ve una película.
+    refresher = filas.Refresher(lambda: filas.row_paths(ks.load_rutas()), ks.load_fila_index, ks.fetch_row,
+                                ks.save_fila, lambda: xbmc.getCondVisibility(
+                                    'System.IdleTime(20) + !Window.IsActive(fullscreenvideo)'), time.time)
+    # Fondos de Deportes: de TheSportsDB, una petición por minuto como mucho (su clave gratuita deja muy pocas).
+    arte = arte_deportes.Fetcher(ks.load_arte, ks.save_arte, http_get, lambda: xbmc.getCondVisibility(
+        '!Window.IsActive(fullscreenvideo)'), time.time)
     last_check = 0.0
     fallos = 0  # cada intento recarga la skin: no insistir sin fin
     while not monitor.abortRequested():
         now = time.time()
         if now - last_check > 3:
             last_check = now
+            if monitor.settings_changed:
+                monitor.settings_changed = False
+                try:
+                    ks.sync_bg_code()
+                except Exception as exc:
+                    ks.log('BlackGhost: %s' % exc)
             if fallos < 3 and ks.finish_pending(lambda: monitor.waitForAbort(3)) is False:
                 fallos += 1
                 ks.log('el menú no se copió (intento %d)' % fallos)
@@ -165,6 +190,18 @@ def main():
             keeper.tick()
         except Exception as exc:
             ks.log('arreglos: %s' % exc)
+        try:
+            renewed = refresher.tick()
+            if renewed:
+                ks.log('fila %s pedida a Palantir' % renewed)
+        except Exception as exc:
+            ks.log('filas: %s' % exc)
+        try:
+            asked = arte.tick()
+            if asked:
+                ks.log('fondos de deportes: competición %s pedida a TheSportsDB' % asked)
+        except Exception as exc:
+            ks.log('fondos de deportes: %s' % exc)
         try:
             autoplay.tick()
         except Exception as exc:  # un fallo de red o de un tráiler no debe tumbar el servicio

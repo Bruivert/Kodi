@@ -40,21 +40,28 @@ def test_addon_xml_declares_script_and_service_for_omega():
 def test_settings_have_keys_and_trailer_switch():
     root = ET.parse(os.path.join(ADDON_DIR, 'resources', 'settings.xml')).getroot()
     ids = {s.get('id') for s in root.iter('setting')}
-    assert {'tmdb_key', 'omdb_key', 'trailers_auto'} <= ids
+    assert {'tmdb_key', 'omdb_key', 'trailers_auto', 'bg_codigo'} <= ids
+
+
+def test_addon_lists_favourites_as_a_video_plugin():
+    root = ET.parse(os.path.join(ADDON_DIR, 'addon.xml')).getroot()
+    plugin = [e for e in root.iter('extension') if e.get('point') == 'xbmc.python.pluginsource']
+    assert len(plugin) == 1 and plugin[0].get('library') == 'plugin.py'
+    assert plugin[0].find('provides').text == 'video'
 
 
 def test_entry_points_compile():
-    for name in ('default.py', 'service.py'):
+    for name in ('default.py', 'service.py', 'plugin.py'):
         py_compile.compile(os.path.join(ADDON_DIR, name), doraise=True)
 
 
 def test_summary_counts_rows_and_names_sports():
     rutas = {'palantir': {'peliculas': {'estrenos': {}, 'populares': {}, 'valoradas': {}, 'generos': {}},
                           'series': {'novedades': {}, 'emision': {}}},
-             'blackghost': {'agenda': {'path': 'x'}, 'deportes': {'futbol': {}, 'ufc': {}}}}
+             'blackghost': {'agenda': {'path': 'x'}, 'deportes': {'futbol': {}, 'ufc': {}, 'padel': {}}}}
     text = ks.summary(rutas)
     assert 'Películas: 4 filas' in text and 'Series: 2 filas' in text
-    assert 'Deportes: Agenda de hoy, Fútbol, UFC' in text
+    assert 'Deportes: Agenda de hoy, Fútbol, UFC y boxeo' in text
 
 
 def test_summary_when_addons_missing():
@@ -372,3 +379,119 @@ def test_apply_never_overwrites_the_preset_without_saved_rutas(monkeypatch):
     written, _ = fake_menu_files(monkeypatch, {})
     ks.apply_skin_config()
     assert not [p for p in written if p.startswith(ks.PRESET)]
+
+
+# --- Código de BlackGhost: va dentro de sus rutas y caduca cada cierto tiempo ---
+
+def fake_bg(monkeypatch, files, code):
+    from tests.test_discover import TREE, find_addon
+    written, flags = fake_menu_files(monkeypatch, files)
+    monkeypatch.setattr(ks, 'setting', lambda sid: code if sid == 'bg_codigo' else '')
+    listed = []
+
+    def list_dir(path):
+        listed.append(path)
+        return TREE.get(path, []) if written.get(ks.BG_CODE_FILE, files.get(ks.BG_CODE_FILE)) == 'n17' else []
+    monkeypatch.setattr(ks, 'list_dir', list_dir)
+    monkeypatch.setattr(ks, 'find_addon', find_addon)
+    return written, flags, listed
+
+
+BG_RUTAS = json.dumps({'palantir': {'peliculas': {'estrenos': {'label': 'E', 'path': 'plugin://p/e'}}},
+                       'blackghost': {'id': 'plugin.video.blackghost', 'codigo': 'n16',
+                                      'agenda': {'label': 'Agenda', 'path': 'plugin://bg/?n16'}}})
+
+
+def test_new_blackghost_code_is_saved_for_blackghost_and_the_rows_are_found_again(monkeypatch):
+    written, flags, _ = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS}, 'n17')
+    assert ks.sync_bg_code()
+    assert written[ks.BG_CODE_FILE] == 'n17'  # BlackGhost entra sin preguntarlo
+    bg = json.loads(written[ks.RUTAS])['blackghost']
+    assert bg['codigo'] == 'n17' and bg['agenda']['path'].endswith('?dplus')
+    assert json.loads(written[ks.RUTAS])['palantir'] == json.loads(BG_RUTAS)['palantir']
+    assert flags == [True]  # el servicio rehace el menú
+
+
+def test_same_or_empty_code_changes_nothing(monkeypatch):
+    rutas = BG_RUTAS.replace('"n16"', '"n17"')
+    written, flags, listed = fake_bg(monkeypatch, {ks.RUTAS: rutas, ks.BG_CODE_FILE: 'n17'}, 'n17')
+    assert not ks.sync_bg_code() and written == {} and flags == [] and listed == []
+    written, flags, listed = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS}, '')
+    assert not ks.sync_bg_code() and written == {} and flags == [] and listed == []
+
+
+def test_code_rejected_by_blackghost_keeps_the_old_rows(monkeypatch):
+    written, flags, _ = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS}, 'n99')
+    assert not ks.sync_bg_code()
+    assert written[ks.BG_CODE_FILE] == 'n99'
+    assert ks.RUTAS not in written and flags == []
+
+
+def test_blackghost_is_never_opened_in_the_background_without_a_saved_code(monkeypatch):
+    # Sin código guardado, "INGRESAR AL ADDON" abre un teclado: desde el servicio se quedaría en pantalla.
+    written, flags, listed = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS, ks.MENU_VERSION_FILE: '3'}, '')
+    assert ks.refresh_menu_if_outdated()
+    assert not any('blackghost' in p for p in listed)
+    assert json.loads(written.get(ks.RUTAS, BG_RUTAS))['blackghost'] == json.loads(BG_RUTAS)['blackghost']
+
+
+def test_older_menu_also_finds_the_blackghost_rows_again(monkeypatch):
+    written, flags, _ = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS, ks.MENU_VERSION_FILE: '3',
+                                              ks.BG_CODE_FILE: 'n17'}, 'n17')
+    assert ks.refresh_menu_if_outdated()
+    bg = json.loads(written[ks.RUTAS])['blackghost']
+    assert 'canales' in bg['deportes'] and bg['codigo'] == 'n17'
+    assert flags == [True]
+
+
+def test_key_pasted_as_the_omdb_example_url_keeps_only_the_key():
+    # OMDb manda por correo "http://www.omdbapi.com/?i=tt3896198&apikey=XXXX": pegada entera, TMDb Helper daba 401.
+    assert ks.clean_key('http://www.omdbapi.com/? i=tt3896198&apikey=f525ce5d') == 'f525ce5d'
+    assert ks.clean_key('https://www.omdbapi.com/?apikey=ab12&i=tt1') == 'ab12'
+    assert ks.clean_key('  f525ce5d ') == 'f525ce5d'
+    assert ks.clean_key('') == ''
+
+
+def test_tmdbhelper_gets_the_clean_omdb_key(monkeypatch):
+    saved = {}
+
+    class Helper(object):
+        def setSettingInt(self, sid, value):
+            saved[sid] = value
+
+        def setSetting(self, sid, value):
+            saved[sid] = value
+    monkeypatch.setattr(ks, 'has_addon', lambda a: True)
+    monkeypatch.setattr(ks.xbmcaddon, 'Addon', lambda a=None: Helper())
+    monkeypatch.setattr(ks, 'setting', lambda sid: 'http://www.omdbapi.com/? i=tt3896198&apikey=f525ce5d')
+    assert ks.apply_tmdbhelper()
+    assert saved['omdb_apikey'] == 'f525ce5d'
+
+
+# --- Copias de las filas de Palantir (filas.py) ---
+
+def test_saved_row_is_read_back_and_listed_in_the_index(monkeypatch):
+    written, _ = fake_menu_files(monkeypatch, {})
+    assert ks.load_fila('peliculas.estrenos') is None and ks.load_fila_index() == {}
+    entry = {'path': 'plugin://p/?e', 'time': 100.0, 'items': [{'label': 'A'}]}
+    ks.save_fila('peliculas.estrenos', entry)
+    assert ks.load_fila('peliculas.estrenos') == entry
+    assert ks.load_fila_index() == {'peliculas.estrenos': {'path': 'plugin://p/?e', 'time': 100.0}}
+    ks.save_fila('series.nuevas', dict(entry, path='plugin://p/?n'))
+    assert set(ks.load_fila_index()) == {'peliculas.estrenos', 'series.nuevas'}
+
+
+def test_row_is_fetched_with_every_field_the_skin_shows(monkeypatch):
+    from resources.lib import filas
+    asked = []
+    monkeypatch.setattr(ks, 'rpc', lambda method, params=None: asked.append((method, params)) or {'files': [{'a': 1}]})
+    assert ks.fetch_row('plugin://p/?e') == [{'a': 1}]
+    assert asked == [('Files.GetDirectory', {'directory': 'plugin://p/?e', 'media': 'video',
+                                             'properties': filas.FIELDS})]
+
+
+def test_sports_art_is_saved_and_read_back(monkeypatch):
+    fake_menu_files(monkeypatch, {})
+    assert ks.load_arte() == {}
+    ks.save_arte({'sports': {'Soccer': 'https://x/s.jpg'}, 'sports_time': 1})
+    assert ks.load_arte() == {'sports': {'Soccer': 'https://x/s.jpg'}, 'sports_time': 1}

@@ -8,6 +8,8 @@ El padre del usuario no se aclara con la skin por defecto de Kodi (Estuary). Que
 
 - Películas, Series y Novedades salen de **Palantir** (ya vinculado a AllDebrid en la caja).
 - Deportes tiene subsecciones sacadas de **BlackGhost**: Fútbol, Baloncesto, NFL, Pádel, Fórmula 1, MotoGP y UFC.
+  - **Cambio de la 1.0.10 (17/11/2026):** BlackGhost 8.0.66 no tiene carpetas por deporte; ordena por fuentes ("agendas" y listas de canales). Las filas son: Agenda de hoy (AGENDA DEPORTESPLUS sin "+", en hora de España; si no, AGENDA LIVE o cualquier agenda), Partidos en España (AGENDA DEL DIA CIRACO, Acestream), Fútbol/Baloncesto/NFL/Motor/UFC (las carpetas de AGENDA NSPORTS), Fórmula 1 en español (Formula 1 Replays) y Canales Acestream (ACESTREAM MIXTO, que el padre ya tenía en favoritos). Pádel no existe.
+  - El código (p. ej. `n17`) va dentro de las rutas (`0-deportes.php?n17`); con uno caducado salen vacías. Se guarda en el ajuste `bg_codigo` del asistente, que lo escribe en `addon_data/plugin.video.blackghost/codeservernew.txt` (BlackGhost entra con él sin preguntar, aunque sea temporal). Si el código cambia, el servicio vuelve a buscar las filas y rehace el menú. Nunca se abre BlackGhost desde el servicio sin código guardado: "INGRESAR AL ADDON" abriría un teclado.
 - El código de BlackGhost cambia cada cierto tiempo y se saca de su Telegram (el enlace o QR aparece dentro del propio addon). Al usuario le gustaría que eso fuera automático.
 - **Favoritos**: el padre guarda lo que le gusta y lo encuentra en un sitio fijo.
 - En Películas y Series se ve la **valoración de IMDb**.
@@ -78,6 +80,7 @@ Supuesto (lo indicó al principio): Palantir y BlackGhost ya están instalados y
 - Necesito el informe de diagnóstico de la caja para cerrar esta parte. Hasta entonces Deportes funciona metiendo el código a mano.
 
 ### 4. Favoritos
+- **Cambio de la 1.0.10:** la fila no lee `favourites://` (solo trae nombre y miniatura: sin fanart ni ficha, la sección salía con fondo liso). La da `plugin://script.papa.inicio/?lista=favoritos` (plugin.py): lee favourites.xml y, a los que tienen año (los de Palantir), les pone la ficha de TMDb (`search/multi`, título y año; tipo, id, fanart, sinopsis), guardada en `favoritos_tmdb.json`. Al pulsar hace lo mismo que el favorito (carpeta, PlayMedia u orden). "Mis favoritos" es la primera fila de Inicio: Kodi carga las filas de 3 en 3 y en orden, y pasar por las secciones con el foco encarga todas sus filas (por eso Deportes tiene 5 filas y el resto en botones).
 - Se usan los favoritos nativos de Kodi (`favourites://`). Sirven igual para películas y series de Palantir que para canales o eventos de BlackGhost.
 - Nueva sección **Favoritos** en el menú (Inicio · Películas · Series · Novedades · Deportes · Favoritos) y una fila "Mis favoritos" en Inicio.
   - Usará un hub libre de Arctic Fuse 3, por ejemplo el 1108 con `HomeSwitcher.1108.Type=Custom`. Lo confirmo al implementar.
@@ -97,7 +100,8 @@ Supuesto (lo indicó al principio): Palantir y BlackGhost ya están instalados y
   - Se queda solo con `iso_639_1=es` **y `iso_3166_1=ES`** y tipo "Trailer", prefiriendo los oficiales.
   - Lo reproduce de fondo con el addon de YouTube.
   - Se para al mover el foco o al darle a reproducir.
-  - **Si no hay tráiler de España, no reproduce nada.** No sale nunca uno latino ni uno en inglés.
+  - Primero, siempre, uno en español de España. Nunca sale uno latino.
+  - **Si no hay ninguno en castellano** (cambio de la 1.0.10, pedido por el usuario el 17/11/2026): el vídeo de TMDb en el idioma original de la película, o en inglés, como la web de TMDb. Prioridad: tráiler, después teaser, después clip. No se usa si falló la red al preguntar por los de España.
 - Necesita una **clave gratuita de TMDb**, que se mete igual que la de OMDb.
 - Se puede activar o desactivar desde el asistente.
 - Riesgo: el addon de YouTube a veces pide claves propias para reproducir. Lo compruebo en la caja y, si hace falta, la guía explica cómo ponerlas.
@@ -145,3 +149,47 @@ Desarrollo en la rama `claude/brave-keller-iht160`. Pages se publica desde `main
    - Cada deporte abre su carpeta.
    - El arranque se mantiene en un tiempo razonable.
    - Diagnóstico enviado para la fase 2.
+
+
+## Velocidad de las filas (1.0.10, 17/11/2026)
+
+**Medido en la caja:**
+- Arctic Fuse 3 abre cada sección como una ventana. Cada vez que se entra en una, aunque el foco solo pase de largo, vuelve a pedir todas sus filas.
+- Kodi ejecuta los addons de Python de uno en uno: un solo GIL para todos los intérpretes. Con la CPU medio libre, todo espera turno.
+- Una lista de Palantir cuesta unos 6 s (unos 30 s al encender). Al encender se lanzaban 11 Palantir para 6 listas distintas, porque la cabecera de cada sección repite una de sus filas.
+- Llegar a Favoritos costaba 65-81 s, y 20-25 s aunque la caja llevara rato encendida.
+
+**Solución** (la misma idea que AutoWidget: https://github.com/drinfernoo/plugin.program.autowidget/issues/53):
+- Las filas y cabeceras de Palantir y Deportes son `plugin://script.papa.inicio/?fila=<grupo.clave>` (filas.py, plugin.py).
+- Se sirven desde una copia en `addon_data/script.papa.inicio/filas/` hecha con `Files.GetDirectory`. Conserva la ficha, el arte, los ids, la ruta y las propiedades de Palantir (`isplayable`, `p3*`).
+- El servicio (`filas.Refresher`) las renueva de una en una:
+  - 2 min tras arrancar y con 20 s entre una y otra;
+  - solo con `System.IdleTime(20)` y sin vídeo a pantalla completa;
+  - cada hora las de Palantir y cada 15 min las de BlackGhost;
+  - si falla, espera 5 min.
+- Si no hay copia, la primera petición la hace en el momento.
+- Los botones de Deportes siguen yendo directos a BlackGhost.
+
+**Resultado:** Favoritos con la caja en marcha, al instante (unos 0,4 s después de pulsar); recién encendida, unos 17 s.
+
+
+## Fanart en Deportes (1.0.10, 17/11/2026)
+
+BlackGhost solo trae su icono (y de fondo su logo de neón). Las tarjetas de NSPORTS (escudos, competición, hora, canal) sí son buenas. Se descartó sacar las imágenes de DAZN: no tiene API pública, raspar su web es frágil y seguramente va contra sus condiciones, y solo cubre lo que emite.
+
+**Fuente: TheSportsDB** (base de datos libre de imágenes deportivas; clave gratuita `123`). Medido el 17/11:
+- `eventsday` da solo 3 partidos por deporte; `all_leagues` 10 ligas; `all_sports` 2 deportes.
+- A las ~10 peticiones seguidas contesta 429 (Cloudflare 1015) y bloquea más de un minuto.
+- Las fotos de cada deporte son fijas (`images/sports/<deporte>.jpg`, en minúsculas con `_`) y no gastan peticiones.
+
+**Qué fondo lleva cada partido** (`arte_deportes.py`, en `plugin.py` al servir las filas `deportes.*`):
+1. Primero se averigua el deporte con palabras clave, iniciales de tenistas, «CB», «BM» y clubes ACB. Así «Hockey Champions League» no es la Champions de fútbol.
+2. Luego, la competición de ese deporte nombrada en el partido. Se mira solo la parte en negrita (la agenda pone detrás el canal, p. ej. «Movistar Liga de Campeones») y la sinopsis de NSPORTS («League: …»).
+3. Si no hay competición: el deporte, el de la fila (Fútbol, Motor) o fútbol.
+4. Cada partido usa siempre la misma de las hasta 4 imágenes de su competición.
+5. La tarjeta de NSPORTS pasa a `landscape`; si no, la skin pondría el fanart en la tarjeta.
+
+**Descargas** (`arte_deportes.Fetcher` en el servicio):
+- Las competiciones (lista `LEAGUES`) se piden por id con `lookupleague`: una por minuto, empezando 3 min tras arrancar.
+- Se guardan una semana en `arte_deportes.json`. Si contesta 429, espera una hora.
+- Solo se usan si el nombre devuelto coincide con el esperado. Comprobados a mano: 4480, 4481, 5071, 4490, 4335, 4400, 4483, 4496, 4429.

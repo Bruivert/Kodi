@@ -69,22 +69,60 @@ SERIES = {
     'generos': _cat('Géneros', ['genero', 'categoria'], exclude=TRAKT_ONLY),
 }
 
-DEPORTES_ROOT = {
+# --- BlackGhost 8.0.66 (noviembre de 2026) ---
+# No tiene una carpeta por deporte: ordena por fuentes (decenas de "agendas" y listas de canales). Con el código
+# guardado en codeservernew.txt, "INGRESAR AL ADDON" lleva sin preguntar a Deportes, Agendas + Canales Acestream…
+BLACKGHOST_ENTRAR = {'entrar': _cat('Entrar', ['ingresar'])}
+BLACKGHOST_MENU = {
     'deportes': _cat('Deportes', ['deporte', 'sport']),
+    'acestream': _cat('Agendas + Canales Acestream', ['acestream', 'agendas canales']),
 }
 
-# El orden es la prioridad al emparejar y el orden en que se ven en el menú.
+# Etiquetas de las filas de Deportes; el orden del menú está en menus.ORDEN_DEPORTES.
 DEPORTES = {
-    'agenda': _cat('Agenda de hoy', ['agenda', 'hoy', 'directo', 'en vivo', 'calendario', 'programacion', 'live']),
-    'nfl': _cat('NFL', ['nfl', 'futbol americano', 'american football', 'super bowl']),
-    'futbol': _cat('Fútbol', ['futbol', 'soccer', 'laliga', 'la liga', 'champions', 'premier league'],
-                   exclude=['americano', 'sala']),
-    'baloncesto': _cat('Baloncesto', ['baloncesto', 'basket', 'nba', 'acb', 'euroliga', 'euroleague']),
-    'padel': _cat('Pádel', ['padel']),
-    'f1': _cat('Fórmula 1', ['formula 1', 'formula uno', 'formula1', 'f1']),
-    'motogp': _cat('MotoGP', ['motogp', 'moto gp', 'motociclismo', 'motos', 'moto2', 'moto3']),
-    'ufc': _cat('UFC', ['ufc', 'mma', 'artes marciales']),
+    'agenda': _cat('Agenda de hoy', []),
+    'espana': _cat('Partidos en España', []),
+    'futbol': _cat('Fútbol', []),
+    'baloncesto': _cat('Baloncesto', []),
+    'nfl': _cat('NFL', []),
+    'motor': _cat('Motor: F1 y MotoGP', []),
+    'f1': _cat('Fórmula 1 en español', []),
+    'ufc': _cat('UFC y boxeo', []),
+    'canales': _cat('Canales Acestream', []),
 }
+
+# Dentro de "AGENDA NSPORTS" sí hay una carpeta por deporte. El orden es la prioridad al emparejar.
+NSPORTS = {
+    'nfl': _cat('NFL', ['nfl', 'futbol americano', 'american football']),
+    'futbol': _cat('Fútbol', ['futbol', 'soccer'], exclude=['americano', 'sala']),
+    'baloncesto': _cat('Baloncesto', ['baloncesto', 'basket', 'nba']),
+    'motor': _cat('Motor', ['motorsport', 'motor', 'formula 1', 'motogp']),
+    'ufc': _cat('UFC y boxeo', ['ufc', 'mma', 'boxeo', 'box']),
+}
+
+# Por su nombre, de la preferida a la de reserva. "DEPORTESPLUS" sin "+" va en hora de España (la "+" en la latina).
+AGENDA = [r'^agenda deportesplus st', r'^agenda live', r'^agenda']
+AGENDA_NSPORTS = [r'^agenda nsports']
+F1_ESPANOL = [r'^formula 1 replays']
+PARTIDOS_ESPANA = [r'^agenda del dia ciraco', r'^agenda del dia']  # CIRACO: los de las teles de España
+CANALES_ACESTREAM = [r'^acestream\W* mixto', r'^acestream\W* ks']
+
+
+def _plain_label(label):
+    """Como normalize, pero conserva "+" (DEPORTESPLUS+ es otra agenda)."""
+    text = unicodedata.normalize('NFKD', clean(label))
+    text = ''.join(c for c in text if not unicodedata.combining(c)).lower()
+    return ' '.join(re.sub(r'[^a-z0-9+]+', ' ', text).split())
+
+
+def find_first(entries, patterns):
+    """La primera carpeta cuyo nombre encaja con el primer patrón que encaje con alguna."""
+    folders = _folders(entries)
+    for pattern in patterns:
+        for e in folders:
+            if re.search(pattern, _plain_label(e['label'])):
+                return _item(e)
+    return None
 
 
 def _folders(entries):
@@ -146,25 +184,33 @@ def discover_palantir(list_dir, find_addon, ask):
 
 
 def discover_blackghost(list_dir, find_addon, ask):
+    """{'id', 'agenda', 'deportes': {fila: carpeta}} de BlackGhost. Solo pregunta por la carpeta Deportes."""
     addon = find_addon(['black ghost', 'blackghost'])
     if not addon:
         return None
-    root_entries = list_dir(_root(addon))
-    root_used = set()
-    top = classify(root_entries, DEPORTES_ROOT, root_used)
-    _ask_missing(top, ['deportes'], DEPORTES_ROOT, root_entries, root_used, ask, 'BlackGhost')
-    result = {'id': addon, 'deportes': {}}
-    if 'deportes' not in top:
-        return result
-    entries = list_dir(top['deportes']['path'])
+    menu = list_dir(_root(addon))
+    entrar = classify(menu, BLACKGHOST_ENTRAR).get('entrar')
+    if entrar:
+        menu = list_dir(entrar['path'])
     used = set()
-    sports = classify(entries, DEPORTES, used)
-    sport_keys = [k for k in DEPORTES if k != 'agenda']
-    _ask_missing(sports, sport_keys, DEPORTES, entries, used, ask, 'BlackGhost')
-    agenda = sports.pop('agenda', None)
-    if agenda is None:
-        agenda = classify(root_entries, {'agenda': DEPORTES['agenda']}, root_used).get('agenda')
-    result['deportes'] = {k: sports[k] for k in sport_keys if k in sports}
+    top = classify(menu, BLACKGHOST_MENU, used)
+    if _folders(menu) and 'deportes' not in top:
+        _ask_missing(top, ['deportes'], BLACKGHOST_MENU, menu, used, ask, 'BlackGhost')
+    result = {'id': addon, 'deportes': {}}
+    rows = {}
+    if 'deportes' in top:
+        deportes = list_dir(top['deportes']['path'])
+        rows['agenda'] = find_first(deportes, AGENDA)
+        nsports = find_first(deportes, AGENDA_NSPORTS)
+        if nsports:
+            rows.update(classify(list_dir(nsports['path']), NSPORTS))
+        rows['f1'] = find_first(deportes, F1_ESPANOL)
+    if 'acestream' in top:
+        acestream = list_dir(top['acestream']['path'])
+        rows['espana'] = find_first(acestream, PARTIDOS_ESPANA)
+        rows['canales'] = find_first(acestream, CANALES_ACESTREAM)
+    agenda = rows.pop('agenda', None)
     if agenda:
         result['agenda'] = agenda
+    result['deportes'] = {k: rows[k] for k in DEPORTES if rows.get(k)}
     return result

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Todo lo que toca Kodi: JSON-RPC, diálogos, archivos, skin y ajustes de otros addons."""
 import json
+import re
 import time
 
 import xbmc
@@ -8,7 +9,7 @@ import xbmcaddon
 import xbmcgui
 import xbmcvfs
 
-from resources.lib import diagnostico, discover, menus, patches
+from resources.lib import diagnostico, discover, filas, menus, patches
 
 ADDON_ID = 'script.papa.inicio'
 TITLE = 'Kodi de Papá'
@@ -21,7 +22,12 @@ PRESET = PROFILE + 'preset/'
 RUTAS = PROFILE + 'rutas.json'
 PENDING = PROFILE + 'pendiente'
 BACKUP = PROFILE + 'backup/'
+FILAS = PROFILE + 'filas/'  # copias de las filas de Palantir (filas.py)
+FILAS_INDEX = FILAS + 'indice.json'
+ARTE = PROFILE + 'arte_deportes.json'  # fanart de TheSportsDB para Deportes (arte_deportes.py)
 MENU_VERSION_FILE = PROFILE + 'menu_version'
+# Donde BlackGhost guarda el código con el que entra sin preguntarlo (lo lee aunque sea uno temporal, como "n17").
+BG_CODE_FILE = 'special://profile/addon_data/plugin.video.blackghost/codeservernew.txt'
 INFORME = 'informe-kodi.txt'
 NODES = 'special://profile/addon_data/script.skinvariables/nodes/%s/' % SKIN
 NONE_LABEL = '— No está / saltar —'
@@ -144,15 +150,23 @@ def ensure_spanish():
 KEYS = [
     ('omdb_key', 'Clave de OMDb (para la nota de IMDb). Vacío = saltar'),
     ('tmdb_key', 'Clave de TMDb v3 (para los tráileres de España). Vacío = saltar'),
+    ('bg_codigo', 'Código de BlackGhost (sale en su Telegram, p. ej. n17). Vacío = saltar'),
 ]
+
+
+def clean_key(value):
+    """La clave sola, también si se pega el enlace de ejemplo de OMDb (http://www.omdbapi.com/?i=…&apikey=XXXX)."""
+    value = (value or '').strip()
+    found = re.search(r'apikey=([A-Za-z0-9]+)', value)
+    return found.group(1) if found else value
 
 
 def ask_keys():
     dialog = xbmcgui.Dialog()
     for sid, heading in KEYS:
-        value = dialog.input(heading, defaultt=setting(sid))
-        if value and value.strip():
-            set_setting(sid, value.strip())
+        value = clean_key(dialog.input(heading, defaultt=setting(sid)))
+        if value:
+            set_setting(sid, value)
 
 
 # - Idioma: YouTube elige la pista de audio según el suyo (en-US de fábrica) y muchos tráileres españoles traen
@@ -186,7 +200,7 @@ def apply_tmdbhelper():
         helper.setSettingInt('language', TMDBH_ES_ES)
     except Exception:
         helper.setSetting('language', str(TMDBH_ES_ES))
-    omdb = setting('omdb_key')
+    omdb = clean_key(setting('omdb_key'))
     if omdb:
         helper.setSetting('omdb_apikey', omdb)
     return True
@@ -199,6 +213,42 @@ def load_rutas():
         return json.loads(read_file(RUTAS) or '{}')
     except ValueError:
         return {}
+
+
+def _load_json(path, default):
+    try:
+        return json.loads(read_file(path) or 'null') or default
+    except ValueError:
+        return default
+
+
+def load_fila(key):
+    return _load_json(FILAS + key + '.json', None)
+
+
+def load_fila_index():
+    """{fila: {'path', 'time'}} sin leer las copias enteras."""
+    return _load_json(FILAS_INDEX, {})
+
+
+def save_fila(key, entry):
+    write_file(FILAS + key + '.json', json.dumps(entry, ensure_ascii=False))
+    index = load_fila_index()
+    index[key] = {'path': entry['path'], 'time': entry['time']}
+    write_file(FILAS_INDEX, json.dumps(index, ensure_ascii=False))
+
+
+def load_arte():
+    return _load_json(ARTE, {})
+
+
+def save_arte(state):
+    write_file(ARTE, json.dumps(state, ensure_ascii=False))
+
+
+def fetch_row(path):
+    """La lista tal como la da el addon (Palantir), con todos los datos que pinta la skin."""
+    return rpc('Files.GetDirectory', {'directory': path, 'media': 'video', 'properties': filas.FIELDS}).get('files') or []
 
 
 def summary(rutas):
@@ -214,17 +264,59 @@ def summary(rutas):
     if bg:
         names = [discover.DEPORTES['agenda']['label']] if bg.get('agenda') else []
         names += [discover.DEPORTES[k]['label'] for k in menus.ORDEN_DEPORTES if k in bg.get('deportes', {})]
-        lines.append('BlackGhost: Deportes: %s' % (', '.join(names) or 'ninguno'))
+        lines.append('BlackGhost: Deportes: %s' % (', '.join(names) or 'ninguno (¿código de BlackGhost caducado?)'))
     else:
         lines.append('BlackGhost: no encontrado')
     return '\n'.join(lines)
+
+
+def apply_bg_code():
+    """Deja el código del asistente donde BlackGhost lo lee al entrar. Devuelve el código ('' si no hay)."""
+    code = setting('bg_codigo').strip()
+    if code and read_file(BG_CODE_FILE).strip() != code:
+        write_file(BG_CODE_FILE, code)
+        log('BlackGhost: código guardado')
+    return code
+
+
+def _discover_blackghost_quietly():
+    """BlackGhost buscado desde el servicio: sin preguntar nada y solo si tiene código guardado (si no, al entrar
+    abre un teclado). None si no encuentra ninguna fila (código caducado, sin red…)."""
+    code = apply_bg_code()
+    if not read_file(BG_CODE_FILE).strip():
+        return None
+    bg = discover.discover_blackghost(list_dir, find_addon, lambda title, labels: -1)
+    if not bg or not (bg.get('agenda') or bg.get('deportes')):
+        return None
+    bg['codigo'] = code
+    return bg
+
+
+def sync_bg_code():
+    """El código va dentro de las rutas de BlackGhost: si cambia, se buscan otra vez y se rehace el menú."""
+    code = setting('bg_codigo').strip()
+    rutas = load_rutas()
+    if not code or not rutas or (rutas.get('blackghost') or {}).get('codigo') == code:
+        return False
+    bg = _discover_blackghost_quietly()
+    if not bg:
+        log('BlackGhost: con el código nuevo no sale ninguna fila')
+        return False
+    rutas['blackghost'] = bg
+    write_file(RUTAS, json.dumps(rutas, indent=2, ensure_ascii=False))
+    set_pending(True)
+    log('BlackGhost: filas buscadas con el código nuevo')
+    return True
 
 
 def run_discovery():
     notify('Buscando los menús de Palantir…')
     pal = discover.discover_palantir(list_dir, find_addon, ask)
     notify('Buscando los deportes de BlackGhost…')
+    code = apply_bg_code()
     bg = discover.discover_blackghost(list_dir, find_addon, ask)
+    if bg and code:
+        bg['codigo'] = code
     rutas = {}
     if pal:
         rutas['palantir'] = pal
@@ -244,13 +336,19 @@ def _write_preset(rutas):
 
 def refresh_menu_if_outdated():
     """Si el menú lo montó una versión con otro formato, se deja pendiente para que el servicio lo rehaga. Antes se
-    vuelven a buscar las listas de Palantir, que cambian ("Más vistas" pasó a pedir Trakt); BlackGhost no se toca."""
+    vuelven a buscar las listas de Palantir, que cambian ("Más vistas" pasó a pedir Trakt), y las de BlackGhost si
+    tiene código guardado. Lo que no se encuentre se queda como estaba."""
     rutas = load_rutas()
     if not rutas or read_file(MENU_VERSION_FILE).strip() == str(menus.MENU_VERSION):
         return False
     pal = discover.discover_palantir(list_dir, find_addon, lambda title, labels: -1)  # sin preguntar nada
+    changed = False
     if pal and (pal.get('peliculas') or pal.get('series')):
-        rutas['palantir'] = pal
+        rutas['palantir'], changed = pal, True
+    bg = _discover_blackghost_quietly()
+    if bg:
+        rutas['blackghost'], changed = bg, True
+    if changed:
         write_file(RUTAS, json.dumps(rutas, indent=2, ensure_ascii=False))
     set_pending(True)
     return True

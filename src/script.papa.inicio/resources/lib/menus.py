@@ -4,37 +4,51 @@
 import json
 
 from resources.lib.discover import DEPORTES, needs_trakt
+from resources.lib.filas import FILAS_DEPORTES, fila_url
 
 SKIN = 'skin.arctic.fuse.3'
 FILE = 'skinvariables-shortcut-%s.json'
-FAVOURITES = 'favourites://'
+# Los favoritos de Kodi con su fanart y ficha de TMDb (plugin.py del asistente): favourites:// no los trae.
+FAVOURITES = 'plugin://script.papa.inicio/?lista=favoritos'
 # Súbelo cuando cambie el formato del menú: las cajas que ya lo tienen montado lo vuelven a aplicar al arrancar.
 # 3: filas sin las listas de Palantir que piden Trakt ("Más vistas"), con "Recién añadidas" y "Nuevas series".
-MENU_VERSION = 3
+# 4: Deportes con las agendas reales de BlackGhost (no tiene carpetas por deporte).
+# 5: "Mis favoritos" primera fila de Inicio y con fanart (plugin.py); Deportes con 5 filas.
+# 6: Inicio · Películas · Series · Favoritos · Deportes (sin Novedades); Estrenos otra vez primera fila de Inicio.
+# 7: filas de Palantir servidas desde la copia del asistente (filas.py).
+# 8: también las filas de Deportes desde la copia (cada 15 min).
+MENU_VERSION = 8
 # Kodi recarga las filas "sin orden" cada vez que empieza o acaba cualquier reproducción (para actualizar lo
 # visto). Con las de Palantir eso ocupaba Python 15 s tras cada tráiler y el siguiente esperaba. Con un orden fijo
 # no las recarga; "track" no cambia nada en películas y series (todas valen 0) y se respeta el orden de Palantir.
 ROW_SORT = 'track'
 
-# Orden en el que tu padre nombró los deportes.
-ORDEN_DEPORTES = ['futbol', 'baloncesto', 'nfl', 'padel', 'f1', 'motogp', 'ufc']
+# Filas de Deportes bajo la agenda: lo de España primero y luego los deportes que nombró tu padre (BlackGhost no
+# tiene pádel; F1 y MotoGP van juntos en "Motor").
+ORDEN_DEPORTES = ['espana', 'futbol', 'baloncesto', 'nfl', 'motor', 'f1', 'ufc', 'canales']
+# Solo las de filas.FILAS_DEPORTES son fila (desde la copia); los botones bajo el menú llevan a todas, directos.
 
 ICONOS_DEPORTES = {
-    'agenda': 'calendar-day', 'futbol': 'futbol', 'baloncesto': 'basketball', 'nfl': 'football-american',
-    'padel': 'table-tennis-paddle-ball', 'f1': 'flag-checkered', 'motogp': 'motorcycle', 'ufc': 'hand-fist',
+    'agenda': 'calendar-day', 'espana': 'flag', 'futbol': 'futbol', 'baloncesto': 'basketball',
+    'nfl': 'football-american', 'motor': 'motorcycle', 'f1': 'flag-checkered', 'ufc': 'hand-fist',
+    'canales': 'satellite-dish',
 }
 
 # (ventana, slot, etiqueta, icono). 1106-1108 se dejan como en la skin, desactivadas.
+# AF3 coloca las activas en este orden: las 4 primeras como texto, el resto como iconos a la derecha. Favoritos va
+# antes que Deportes: al pasar por Películas y Series le da tiempo a cargar (el usuario lo prefiere así a tenerla
+# primera). Novedades queda apagada: repetía Estrenos y Series nuevas de Inicio.
 HUBS = [
     ('1101', '01', 'Películas', 'film'),
     ('1102', '02', 'Series', 'tv'),
-    ('1103', '03', 'Novedades', 'recentlyadded'),
+    ('1109', '09', 'Favoritos', 'heart'),
     ('1104', '04', 'Deportes', 'trophy'),
+    ('1103', '03', 'Novedades', 'recentlyadded'),
     ('1106', '06', '$LOCALIZE[31605]', 'calendar'),
     ('1107', '07', '$LOCALIZE[31085] / PVR', 'livetv'),
     ('1108', '08', '$LOCALIZE[24001]', 'addon'),
-    ('1109', '09', 'Favoritos', 'heart'),
 ]
+APAGADAS = {'1103'}
 
 HUB_TYPES = [
     ('1101', 'Custom', 'Standard'), ('1102', 'Custom', 'Standard'), ('1103', 'Custom', 'Standard'),
@@ -84,15 +98,18 @@ def _first(group, *keys):
     return None
 
 
-def _usable(group):
-    # Las rutas guardadas por versiones anteriores pueden traer listas de Palantir que ahora piden Trakt.
-    return {key: item for key, item in (group or {}).items() if not needs_trakt(item.get('label'))}
+def _usable(group, name):
+    # Las rutas guardadas por versiones anteriores pueden traer listas de Palantir que ahora piden Trakt. Las demás se
+    # sirven desde la copia del asistente (filas.py): AF3 las vuelve a pedir cada vez que se entra en una sección.
+    return {key: dict(item, path=fila_url('%s.%s' % (name, key))) for key, item in (group or {}).items()
+            if not needs_trakt(item.get('label'))}
 
 
 def _parts(rutas):
     pal = rutas.get('palantir') or {}
     bg = rutas.get('blackghost') or {}
-    return _usable(pal.get('peliculas')), _usable(pal.get('series')), bg.get('agenda'), bg.get('deportes') or {}
+    return (_usable(pal.get('peliculas'), 'peliculas'), _usable(pal.get('series'), 'series'), bg.get('agenda'),
+            bg.get('deportes') or {})
 
 
 def _sections(rutas):
@@ -124,21 +141,30 @@ def _sections(rutas):
     return {'1101': pel_rows, '1102': ser_rows, '1103': nov_rows, '1104': dep_rows}
 
 
+def _row_path(win, label, path):
+    """Ruta de la fila, o None si no es fila. Las de Deportes se sirven desde la copia (filas.py)."""
+    if win != '1104':
+        return path
+    keys = [k for k in FILAS_DEPORTES if DEPORTES[k]['label'] == label]
+    return fila_url('deportes.' + keys[0]) if keys else None
+
+
 def build_preset(rutas):
     files = {}
     sections = _sections(rutas)
-    enabled = {'1109'} | {w for w, rows in sections.items() if rows}
+    enabled = ({'1109'} | {w for w, rows in sections.items() if rows}) - APAGADAS
     files[FILE % 'hubs'] = [
         {'label': label, 'icon': icon(ico), 'path': '', 'target': '', 'window': win, 'slot': slot,
          'disabled': '' if win in enabled else 'True'}
         for win, slot, label, ico in HUBS
     ]
     for win, rows in sections.items():
-        files[FILE % ('%swidgets' % win)] = [_row(label, path, style) for label, path, _, style in rows]
+        files[FILE % ('%swidgets' % win)] = [_row(label, _row_path(win, label, path), style)
+                                             for label, path, _, style in rows if _row_path(win, label, path)]
         # Botones bajo el menú solo donde ahorran camino (Deportes); en el resto repetirían las filas.
         submenu = rows if win in SUBMENU else []
         files[FILE % ('%ssubmenu' % win)] = [_link(label, path, ico) for label, path, ico, _ in submenu]
-    files[FILE % '1109widgets'] = [_row('Mis favoritos', FAVOURITES)]
+    files[FILE % '1109widgets'] = [_row('Mis favoritos', FAVOURITES, 'Poster')]
     files[FILE % '1109submenu'] = []
 
     pel, ser, agenda, dep = _parts(rutas)
@@ -148,10 +174,10 @@ def build_preset(rutas):
     serie_nueva = _first(ser, 'novedades', 'emision')
     if serie_nueva:
         home.append(_row('Series nuevas', serie_nueva['path'], 'Poster'))
-    deportes_hoy = agenda or next((dep[k] for k in ORDEN_DEPORTES if k in dep), None)
-    if deportes_hoy:
-        home.append(_row('Deportes hoy', deportes_hoy['path']))
-    home.append(_row('Mis favoritos', FAVOURITES))
+    hoy = 'agenda' if agenda else next((k for k in ORDEN_DEPORTES if k in dep), None)
+    if hoy:
+        home.append(_row('Deportes hoy', fila_url('deportes.' + hoy) if hoy in FILAS_DEPORTES else dep[hoy]['path']))
+    home.append(_row('Mis favoritos', FAVOURITES, 'Poster'))
     files[FILE % 'homewidgets'] = home
     files[FILE % 'homesubmenu'] = []
     return files
@@ -194,12 +220,15 @@ def skin_builtins(rutas, preset_folder, now, first_run=False):
     out += _spotlight('1102', *_named(ser, ('populares', 'Populares'), ('nuevas', 'Nuevas series'),
                                       ('novedades', 'Nuevos episodios'), ('emision', 'En emisión')))
     out += _spotlight('1103', _first(pel, 'estrenos') or _first(ser, 'novedades', 'emision'), 'Novedades')
-    out += _spotlight('1104', agenda, 'Agenda de hoy')
+    out += _spotlight('1104', {'path': fila_url('deportes.agenda')} if agenda else None, 'Agenda de hoy')
     out += _spotlight('1109', None, '')
     # Interruptores con SetBool(…,false): Skin.Reset(x) se queda en el texto x si existe y no apaga el interruptor.
     out += ['Skin.SetString(CustomRating.Movies.Item01,IMDb)',
             'Skin.SetString(CustomRating.TVShows.Item01,IMDb)',
             'Skin.SetBool(TMDbHelper.DisableRatings,false)',
+            # Con la lupa: el menú circular de AF3 exige quitarla y hace falta para buscar películas y series.
+            'Skin.SetBool(HomeSwitcher.LoopBack,false)',
+            'Skin.SetBool(HomeSwitcher.DisableSearch,false)',
             'RunScript(script.skinvariables,copy_menufolder=%s,skin=%s,force=True)' % (folder, SKIN),
             'Skin.SetString(Shortcuts.RebuildDateTime,%s)' % now,
             'Skin.SetBool(SetupWizard.Pending,false)',

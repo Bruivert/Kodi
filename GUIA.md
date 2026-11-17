@@ -2,12 +2,12 @@
 
 Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple TV:
 
-**Inicio · Películas · Series · Novedades · Deportes · Favoritos**
+**Inicio · Películas · Series · Favoritos · Deportes**
 
 - Películas, Series y Novedades salen de **Palantir** (con tu AllDebrid).
-- Deportes sale de **BlackGhost**: Agenda de hoy, Fútbol, Baloncesto, NFL, Pádel, Fórmula 1, MotoGP y UFC.
+- Deportes sale de **BlackGhost**. Filas: Agenda de hoy (en hora de España), Partidos en España (Acestream), Fútbol, Motor (F1 y MotoGP) y Canales Acestream. Con los botones bajo el menú se llega además a Baloncesto, NFL, Fórmula 1 en español (repeticiones) y UFC y boxeo. BlackGhost no tiene pádel.
 - Nota de **IMDb** en películas y series.
-- **Tráileres automáticos en español de España**: si tu padre se queda unos segundos sobre una película, suena su tráiler de fondo. Si no hay tráiler de España, no suena nada.
+- **Tráileres automáticos en español de España**: si tu padre se queda unos segundos sobre una película, suena su tráiler de fondo. Si no hay ninguno en castellano, suena el de la web de TMDb en el idioma original (casi siempre inglés), como cuando miras la película en el móvil.
 
 > Antes de empezar, Palantir (con AllDebrid) y BlackGhost tienen que estar instalados y funcionando en la caja.
 
@@ -37,7 +37,8 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 5. **Addons → Addons de programas → Kodi de Papá — Asistente → Configurar todo**. El asistente:
    - Pregunta si instalar **Arctic Fuse 3** y **YouTube** → **Sí** a los dos.
    - Pide las claves de **OMDb** y de **TMDb**. Puedes dejarlas vacías y ponerlas después.
-   - Recorre Palantir y BlackGhost. Si **BlackGhost pide el código**, escríbelo. Si no reconoce alguna carpeta, te pregunta cuál es. Si no existe, elige **«— No está / saltar —»**.
+   - Te pide las claves y el **código de BlackGhost** (sale en su Telegram, p. ej. `n17`). El asistente se lo deja guardado a BlackGhost, que ya no lo vuelve a pedir.
+   - Recorre Palantir y BlackGhost. Si no reconoce alguna carpeta, te pregunta cuál es. Si no existe, elige **«— No está / saltar —»**.
    - Te enseña un resumen de lo que ha encontrado.
    - Cambia la skin. Cuando Kodi pregunte **«¿Mantener este cambio?»**, pulsa **Sí**.
    - Espera unos segundos en el Inicio hasta que salga **«Menú de papá listo»**.
@@ -50,7 +51,7 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 | Ver algo | **OK** |
 | Volver | **Atrás** |
 | Guardarlo en Favoritos | Mantener pulsado **OK** (o el botón ☰) → **Añadir a favoritos** |
-| Ver mis favoritos | Sección **Favoritos** o la fila **Mis favoritos** del Inicio |
+| Ver mis favoritos | La sección **Favoritos** o la última fila del Inicio, **Mis favoritos**. Las películas y series salen con su fanart de fondo, como en Películas. |
 
 ## 5. Mantenimiento (abre el asistente)
 
@@ -70,8 +71,10 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 | Las carátulas desaparecen mientras suena el tráiler | Es a propósito: a los 3 segundos de tráiler se desvanecen despacio para que se vea entero, y vuelven al tocar cualquier botón. El asistente lo añade a la skin (con copia del original). Arctic Fuse 3 se actualiza sola y lo quita: el asistente lo comprueba cada 10 minutos, lo vuelve a poner y recarga la skin cuando nadie usa Kodi (nada sonando y 5 minutos sin tocar el mando). |
 | El tráiler tarda en salir | Debería sonar unos 4 segundos después de pararte en una película. Antes tardaba 15-20 s porque, al acabar cada tráiler, Kodi recargaba las filas de Palantir; el asistente les pone un orden fijo para que no lo haga y, si ya tenías el menú montado, lo rehace solo al reiniciar Kodi. Tras encender la caja, el primero puede tardar algo más. |
 | Un tráiler suena en inglés | YouTube añade a muchos tráileres españoles un doblaje automático al inglés y lo elegía porque venía configurado en inglés. El asistente lo pone en español de España (idioma `es`, región `ES`). Además, antes de poner un tráiler mira su título en YouTube y se salta los subtitulados (VOSE) y los que TMDb marca como españoles pero son en inglés. |
-| Una película no tiene tráiler | Si TMDb no tiene un tráiler en español de España, el asistente lo busca en YouTube (título y año de la película + «tráiler español») y solo acepta uno que empiece por el título, diga que es en español o venga de un canal de España, dure menos de 5 minutos y no sea latino ni subtitulado. Si no lo encuentra, pone el teaser en español de TMDb. Muchos estrenos pequeños no tienen ninguno: es normal. |
+| Una película no tiene tráiler | Si TMDb no tiene un tráiler en español de España, el asistente lo busca en YouTube (título y año de la película + «tráiler español») y solo acepta uno que empiece por el título, diga que es en español o venga de un canal de España, dure menos de 5 minutos y no sea latino ni subtitulado. Si no lo encuentra, pone el teaser en español de TMDb. Y si tampoco hay, el vídeo de TMDb en el idioma original de la película (el tráiler; si no hay, el teaser o un clip), igual que la web de TMDb: así salen, por ejemplo, «Ali G: Kién es yo?» (en inglés) o «El regalo de cumpleaños» (un clip en alemán). Solo se queda sin tráiler lo que TMDb no tiene en ningún idioma. |
 | Palantir pregunta por Trakt.tv o una fila sale vacía | Algunas listas de Palantir («Más vistas», «Recomendadas», «Series en seguimiento») solo funcionan con una cuenta de Trakt.tv. El menú no las usa: Películas lleva **Estrenos**, **Recién añadidas** y **Géneros**, y Series **Nuevos episodios**, **Nuevas series** y **Géneros**. Si aun así sale la pregunta, responde **No** y haz Asistente → **Actualizar menús**. |
-| Deportes vacío o con error | Seguramente ha caducado el código de BlackGhost: ábrelo una vez y pon el nuevo. |
+| Una fila tarda en salir o no está al día | Las filas de Palantir y de Deportes salen de una copia que el asistente renueva sola (cada hora las películas y series, cada 15 min los deportes; empieza 2 min después de encender y cuando nadie toca el mando). Arctic Fuse 3 vuelve a pedir todas las filas cada vez que se entra en una sección y Kodi ejecuta los addons de Python de uno en uno: pedírselas cada vez a Palantir hacía esperar más de un minuto. En el primer minuto tras encender sigue yendo algo más lento (arrancan a la vez los servicios de otros addons). |
+| Un partido sale con un fondo que no le toca | BlackGhost no trae imágenes: el asistente pone las de TheSportsDB. Si el partido nombra su competición (Liga de Naciones, Champions, LaLiga, NBA…), la de la competición; si no, la del deporte (tenis, baloncesto, motor…), y si no se sabe, la de fútbol. Las de las competiciones se descargan poco a poco (su clave gratuita deja muy pocas consultas) y se guardan una semana. |
+| Deportes vacío o con error | Seguramente ha caducado el código de BlackGhost (va dentro de las rutas de Deportes). Pon el nuevo en **Asistente → Claves** (o en sus ajustes, «Código de BlackGhost»): el asistente se lo pasa a BlackGhost, vuelve a buscar las filas y rehace el menú solo. |
 | El menú no ha cambiado | Reinicia Kodi. El servicio termina de montarlo al volver al Inicio. |
 | Falta una sección | Asistente → **Actualizar menús**. Si el addon no está instalado, su sección se oculta. |

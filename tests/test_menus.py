@@ -10,6 +10,11 @@ PAL = 'plugin://plugin.video.palantir3/'
 BG = 'plugin://plugin.video.blackghost/'
 
 
+def fila(key):
+    # Las filas de Palantir se sirven desde la copia del asistente (resources/lib/filas.py).
+    return 'plugin://script.papa.inicio/?fila=' + key
+
+
 def it(label, path):
     return {'label': label, 'path': path}
 
@@ -26,8 +31,10 @@ RUTAS = {
         'id': 'plugin.video.blackghost',
         'agenda': it('Agenda', BG + 'agenda'),
         'deportes': {'futbol': it('Fútbol', BG + 'futbol'), 'nfl': it('NFL', BG + 'nfl'),
-                     'baloncesto': it('NBA', BG + 'nba'), 'padel': it('Pádel', BG + 'padel'),
-                     'f1': it('F1', BG + 'f1'), 'motogp': it('MotoGP', BG + 'motogp'), 'ufc': it('UFC', BG + 'ufc')},
+                     'baloncesto': it('Basketball', BG + 'nba'), 'espana': it('CIRACO', BG + 'ciraco'),
+                     'f1': it('F1 Replays', BG + 'f1'), 'motor': it('Motorsport', BG + 'motor'),
+                     'ufc': it('UFC', BG + 'ufc'), 'canales': it('ACESTREAM MIXTO', BG + 'mixto'),
+                     'padel': it('Pádel', BG + 'padel')},  # "padel" lo guardó una versión antigua: ya no sale
     },
 }
 
@@ -50,30 +57,52 @@ def test_all_items_have_arctic_fuse_keys():
 def test_enabled_hubs_are_the_five_sections_in_spanish():
     hubs = m.build_preset(RUTAS)[f('hubs')]
     enabled = [(h['window'], h['label']) for h in hubs if h['disabled'] != 'True']
-    assert enabled == [('1101', 'Películas'), ('1102', 'Series'), ('1103', 'Novedades'),
-                       ('1104', 'Deportes'), ('1109', 'Favoritos')]
+    # AF3 pone las secciones activas en el orden de la lista: Favoritos antes que Deportes (al pasar por Películas y
+    # Series le da tiempo a cargar) y sin Novedades, que repetía Estrenos y Series nuevas de Inicio.
+    assert enabled == [('1101', 'Películas'), ('1102', 'Series'), ('1109', 'Favoritos'), ('1104', 'Deportes')]
     assert {h['window'] for h in hubs} == {'1101', '1102', '1103', '1104', '1106', '1107', '1108', '1109'}
 
 
-def test_favoritos_hub_shows_kodi_favourites():
+FAVORITOS = 'plugin://script.papa.inicio/?lista=favoritos'
+
+
+def test_favoritos_hub_shows_kodi_favourites_with_their_tmdb_art():
+    # favourites:// no trae fanart ni ficha: los da la lista del asistente.
     files = m.build_preset(RUTAS)
-    assert [w['path'] for w in files[f('1109widgets')]] == ['favourites://']
-    assert 'favourites://' in [w['path'] for w in files[f('homewidgets')]]
+    assert [w['path'] for w in files[f('1109widgets')]] == [FAVORITOS]
 
 
-def test_sports_rows_follow_dad_order_with_agenda_first():
+def test_inicio_starts_with_estrenos_and_ends_with_favourites():
+    assert [w['label'] for w in m.build_preset(RUTAS)[f('homewidgets')]] == [
+        'Estrenos', 'Series nuevas', 'Deportes hoy', 'Mis favoritos']
+    assert m.build_preset(RUTAS)[f('homewidgets')][-1]['path'] == FAVORITOS
+
+
+def test_favourites_rows_are_posters():
+    # Casi todos son películas y series: en marcos apaisados la carátula quedaba pequeña en medio.
+    files = m.build_preset(RUTAS)
+    rows = files[f('1109widgets')] + [w for w in files[f('homewidgets')] if w['path'] == FAVORITOS]
+    assert len(rows) == 2 and all(r['widget_style'] == 'Poster' for r in rows)
+
+
+def test_sports_rows_are_few_and_buttons_reach_every_sport():
+    # Cada fila de BlackGhost tarda 3-7 s y las demás secciones esperan a que acaben: solo 5 filas. Los botones bajo
+    # el menú no cargan nada hasta pulsarlos y llevan a todo.
     rows = m.build_preset(RUTAS)[f('1104widgets')]
-    assert [r['label'] for r in rows] == ['Agenda de hoy', 'Fútbol', 'Baloncesto', 'NFL', 'Pádel',
-                                          'Fórmula 1', 'MotoGP', 'UFC']
+    assert [r['label'] for r in rows] == ['Agenda de hoy', 'Partidos en España', 'Fútbol', 'Motor: F1 y MotoGP',
+                                          'Canales Acestream']
     sub = m.build_preset(RUTAS)[f('1104submenu')]
-    assert [s['path'] for s in sub] == [r['path'] for r in rows]
+    assert [s['label'] for s in sub] == ['Agenda de hoy', 'Partidos en España', 'Fútbol', 'Baloncesto', 'NFL',
+                                         'Motor: F1 y MotoGP', 'Fórmula 1 en español', 'UFC y boxeo',
+                                         'Canales Acestream']
+    assert sub[3]['path'] == BG + 'nba'
 
 
 def test_movies_rows_are_posters_from_palantir():
     rows = m.build_preset(RUTAS)[f('1101widgets')]
     assert [(r['label'], r['path']) for r in rows] == [
-        ('Estrenos', PAL + 'p_new'), ('Populares', PAL + 'p_pop'), ('Mejor valoradas', PAL + 'p_top'),
-        ('Géneros', PAL + 'p_gen')]
+        ('Estrenos', fila('peliculas.estrenos')), ('Populares', fila('peliculas.populares')),
+        ('Mejor valoradas', fila('peliculas.valoradas')), ('Géneros', fila('peliculas.generos'))]
     assert all(r['widget_style'] == 'Poster' and r['target'] == 'videos' for r in rows[:3])
     assert 'widget_style' not in rows[3]
 
@@ -82,23 +111,23 @@ def test_submenus_only_in_deportes():
     files = m.build_preset(RUTAS)
     for win in ('1101', '1102', '1103', '1109'):
         assert files[f('%ssubmenu' % win)] == [], win
-    assert [s['path'] for s in files[f('1104submenu')]] == [r['path'] for r in files[f('1104widgets')]]
+    assert files[f('1104submenu')]
 
 
 def test_series_generos_row_last_only_when_palantir_has_it():
     rutas = json.loads(json.dumps(RUTAS))
     rutas['palantir']['series']['generos'] = it('Géneros', PAL + 's_gen')
     rows = m.build_preset(rutas)[f('1102widgets')]
-    assert (rows[-1]['label'], rows[-1]['path']) == ('Géneros', PAL + 's_gen')
+    assert (rows[-1]['label'], rows[-1]['path']) == ('Géneros', fila('series.generos'))
     assert 'Géneros' not in [r['label'] for r in m.build_preset(RUTAS)[f('1102widgets')]]
 
 
 def test_missing_sport_has_no_row():
     rutas = json.loads(json.dumps(RUTAS))
-    del rutas['blackghost']['deportes']['padel']
+    del rutas['blackghost']['deportes']['espana']
     del rutas['blackghost']['agenda']
     labels = [r['label'] for r in m.build_preset(rutas)[f('1104widgets')]]
-    assert 'Pádel' not in labels and 'Agenda de hoy' not in labels
+    assert 'Partidos en España' not in labels and 'Agenda de hoy' not in labels
     assert labels[0] == 'Fútbol'
 
 
@@ -107,8 +136,8 @@ def test_empty_rutas_only_favoritos_enabled():
     enabled = [h['window'] for h in files[f('hubs')] if h['disabled'] != 'True']
     assert enabled == ['1109']
     assert files[f('1101widgets')] == []
-    assert files[f('homewidgets')] == [{'label': 'Mis favoritos', 'icon': '', 'path': 'favourites://',
-                                        'target': 'videos', 'widget_sortby': 'track'}]
+    assert files[f('homewidgets')] == [{'label': 'Mis favoritos', 'icon': '', 'path': FAVORITOS,
+                                        'target': 'videos', 'widget_sortby': 'track', 'widget_style': 'Poster'}]
 
 
 def test_builtins_set_imdb_ratings_and_copy_preset():
@@ -154,8 +183,8 @@ def test_builtins_finish_af3_first_run_only_when_it_did_not():
 
 def test_builtins_spotlight_uses_palantir_and_resets_missing():
     b = m.skin_builtins(RUTAS, 'x/', 'now')
-    assert 'Skin.SetString(HomeSwitcher.Home.Spotlight.Path,"%sp_new")' % PAL in b
-    assert 'Skin.SetString(HomeSwitcher.1104.Spotlight.Path,"%sagenda")' % BG in b
+    assert 'Skin.SetString(HomeSwitcher.Home.Spotlight.Path,"%s")' % fila('peliculas.estrenos') in b
+    assert 'Skin.SetString(HomeSwitcher.1104.Spotlight.Path,"%s")' % fila('deportes.agenda') in b
     b2 = m.skin_builtins({}, 'x/', 'now')
     assert 'Skin.Reset(HomeSwitcher.Home.Spotlight.Path)' in b2
     assert not any(s.startswith('Skin.SetString(HomeSwitcher.Home.Spotlight.Path') for s in b2)
@@ -197,17 +226,19 @@ RUTAS_SIN_TRAKT = {'palantir': {
 def test_rows_use_recently_added_movies_and_new_series():
     files = m.build_preset(RUTAS_SIN_TRAKT)
     assert [(r['label'], r['path']) for r in files[f('1101widgets')]] == [
-        ('Estrenos', PAL + 'p_new'), ('Recién añadidas', PAL + 'p_add'), ('Géneros', PAL + 'p_gen')]
+        ('Estrenos', fila('peliculas.estrenos')), ('Recién añadidas', fila('peliculas.recientes')),
+        ('Géneros', fila('peliculas.generos'))]
     assert [(r['label'], r['path']) for r in files[f('1102widgets')]] == [
-        ('Nuevos episodios', PAL + 's_upd'), ('Nuevas series', PAL + 's_new'), ('Géneros', PAL + 's_gen')]
+        ('Nuevos episodios', fila('series.novedades')), ('Nuevas series', fila('series.nuevas')),
+        ('Géneros', fila('series.generos'))]
     assert all(r['widget_style'] == 'Poster' for r in files[f('1101widgets')][:2] + files[f('1102widgets')][:2])
 
 
 def test_spotlights_name_the_list_they_show():
     b = m.skin_builtins(RUTAS_SIN_TRAKT, 'x/', 'now')
-    assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Path,"%sp_add")' % PAL in b
+    assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Path,"%s")' % fila('peliculas.recientes') in b
     assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Label,Recién añadidas)' in b
-    assert 'Skin.SetString(HomeSwitcher.1102.Spotlight.Path,"%ss_new")' % PAL in b
+    assert 'Skin.SetString(HomeSwitcher.1102.Spotlight.Path,"%s")' % fila('series.nuevas') in b
     assert 'Skin.SetString(HomeSwitcher.1102.Spotlight.Label,Nuevas series)' in b
     assert 'Skin.SetString(HomeSwitcher.Home.Spotlight.Label,Estrenos)' in b
 
@@ -219,7 +250,34 @@ def test_saved_trakt_only_lists_are_left_out():
     rutas['palantir']['series']['populares'] = it('Más vistas', PAL + 's_most')
     files = m.build_preset(rutas)
     paths = [r['path'] for name, rows in files.items() for r in rows]
-    assert PAL + 'p_most' not in paths and PAL + 's_most' not in paths
+    assert fila('peliculas.populares') not in paths and fila('series.populares') not in paths
     b = m.skin_builtins(rutas, 'x/', 'now')
-    assert not [x for x in b if 'p_most' in x or 's_most' in x]
+    assert not [x for x in b if 'populares' in x]
     assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Label,Estrenos)' in b
+
+
+def test_menu_keeps_the_search_icon():
+    # El menú circular de AF3 (Favoritos a la izquierda de Inicio) exige quitar la lupa, y hace falta para buscar.
+    b = m.skin_builtins(RUTAS, 'x/', 'now')
+    assert 'Skin.SetBool(HomeSwitcher.DisableSearch,false)' in b
+    assert 'Skin.SetBool(HomeSwitcher.LoopBack,false)' in b
+
+
+def test_palantir_rows_and_spotlights_never_call_palantir_directly():
+    # AF3 vuelve a pedir todas las filas cada vez que se entra en una sección: con Palantir directo, ~6 s cada una.
+    files = m.build_preset(RUTAS_SIN_TRAKT)
+    paths = [r['path'] for rows in files.values() for r in rows if r.get('path')]
+    assert paths and not [p for p in paths if p.startswith(PAL)]
+    assert not [x for x in m.skin_builtins(RUTAS_SIN_TRAKT, 'x/', 'now') if PAL in x]
+
+
+def test_sports_rows_and_spotlight_come_from_the_copy_but_buttons_open_blackghost():
+    files = m.build_preset(RUTAS)
+    rows = files[f('1104widgets')]
+    assert rows and all(r['path'].startswith('plugin://script.papa.inicio/?fila=deportes.') for r in rows)
+    assert [w['path'] for w in files[f('homewidgets')] if w['label'] == 'Deportes hoy'] == [fila('deportes.agenda')]
+    assert 'Skin.SetString(HomeSwitcher.1104.Spotlight.Path,"%s")' % fila('deportes.agenda') in m.skin_builtins(
+        RUTAS, 'x/', 'now')
+    # Los botones no cargan nada hasta pulsarlos: van directos a BlackGhost, también los que no son fila.
+    sub = files[f('1104submenu')]
+    assert all(s['path'].startswith(BG) for s in sub)
