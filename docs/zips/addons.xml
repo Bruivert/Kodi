@@ -28,7 +28,7 @@
         </assets>
     </extension>
 </addon>
-<addon id="script.papa.inicio" name="Kodi de Papá — Asistente" version="1.0.9" provider-name="Bruivert">
+<addon id="script.papa.inicio" name="Kodi de Papá — Asistente" version="1.0.10" provider-name="Bruivert">
     <requires>
         <import addon="xbmc.python" version="3.0.1"/>
         <import addon="script.module.requests" version="2.22.0"/>
@@ -40,8 +40,8 @@
     <extension point="xbmc.addon.metadata">
         <summary lang="es_ES">Monta el Kodi de tu padre: estilo Apple TV con Palantir y BlackGhost.</summary>
         <summary lang="en_GB">Sets up an Apple TV style Kodi home with Palantir and BlackGhost.</summary>
-        <description lang="es_ES">Instala Arctic Fuse 3 y crea el menú Películas, Series, Novedades, Deportes y Favoritos a partir de Palantir y BlackGhost. Añade la nota de IMDb y tráileres automáticos en español de España.</description>
-        <description lang="en_GB">Installs Arctic Fuse 3 and builds a Movies, TV, New, Sports and Favourites menu from Palantir and BlackGhost, with IMDb ratings and Spain-Spanish auto trailers.</description>
+        <description lang="es_ES">Instala Arctic Fuse 3 y crea el menú Películas, Series, Novedades, Deportes y Favoritos a partir de Palantir y BlackGhost. Añade la nota de IMDb y tráileres automáticos en español de España (si no hay, el original, como en la web de TMDb).</description>
+        <description lang="en_GB">Installs Arctic Fuse 3 and builds a Movies, TV, New, Sports and Favourites menu from Palantir and BlackGhost, with IMDb ratings and Spain-Spanish auto trailers (or the original one when there is none).</description>
         <platform>all</platform>
         <license>MIT</license>
         <source>https://github.com/Bruivert/Kodi</source>

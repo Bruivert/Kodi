@@ -194,9 +194,31 @@ def youtube_trailer(kind, title, year, http_post):
     return good[0]['key'] if good else None
 
 
+# --- Si no hay nada en castellano: como la web de TMDb, el vídeo en el idioma original (o en inglés) ---
+
+ORIGINAL_TYPES = ('Trailer', 'Teaser', 'Clip')
+
+
+def original_videos_url(kind, tmdb_id, original_language, api_key):
+    return _url('/%s/%s/videos' % (kind, tmdb_id), api_key,
+                include_video_language='%s,en,null' % (original_language or 'en'))
+
+
+def pick_original_trailer(videos, original_language):
+    """Clave del mejor vídeo de TMDb en cualquier idioma: tráiler, si no teaser, si no clip; el idioma original
+    antes que el inglés."""
+    valid = [v for v in videos or [] if v.get('site') == 'YouTube' and v.get('key') and v.get('type') in ORIGINAL_TYPES]
+    if not valid:
+        return None
+    return max(valid, key=lambda v: (-ORIGINAL_TYPES.index(v['type']), v.get('iso_639_1') == original_language,
+                                     bool(v.get('official')), v.get('size') or 0, v.get('published_at') or ''))['key']
+
+
 def find_trailer(kind, tmdb_id, api_key, http_get, http_post):
-    """El tráiler de TMDb; si no tiene uno bueno, el de la búsqueda de YouTube; si tampoco, el teaser de TMDb."""
-    videos = _get(http_get, videos_url(kind, tmdb_id, api_key)).get('results')
+    """El tráiler de TMDb; si no tiene uno bueno, el de la búsqueda de YouTube; si tampoco, el teaser de TMDb; y si
+    no hay nada en castellano, el vídeo de TMDb en el idioma original."""
+    answer = _get(http_get, videos_url(kind, tmdb_id, api_key))
+    videos = answer.get('results')
     key = _first_spanish(spain_trailers(videos), http_get)
     if key:
         return key
@@ -205,7 +227,12 @@ def find_trailer(kind, tmdb_id, api_key, http_get, http_post):
     year = (info.get('release_date') or info.get('first_air_date') or '')[:4]
     if title:
         key = youtube_trailer(kind, title, year, http_post)
-    return key or _first_spanish(spain_trailers(videos, 'Teaser'), http_get)
+    key = key or _first_spanish(spain_trailers(videos, 'Teaser'), http_get)
+    if key or not info or 'results' not in answer:  # sin saber qué hay en castellano no se pone otro idioma
+        return key
+    language = info.get('original_language')
+    return pick_original_trailer(_get(http_get, original_videos_url(kind, tmdb_id, language, api_key)).get('results'),
+                                 language)
 
 
 def youtube_url(key):

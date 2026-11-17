@@ -97,7 +97,8 @@ Supuesto (lo indicó al principio): Palantir y BlackGhost ya están instalados y
   - Se queda solo con `iso_639_1=es` **y `iso_3166_1=ES`** y tipo "Trailer", prefiriendo los oficiales.
   - Lo reproduce de fondo con el addon de YouTube.
   - Se para al mover el foco o al darle a reproducir.
-  - **Si no hay tráiler de España, no reproduce nada.** No sale nunca uno latino ni uno en inglés.
+  - Primero, siempre, uno en español de España. Nunca sale uno latino.
+  - **Si no hay ninguno en castellano** (cambio de la 1.0.10, pedido por el usuario el 17/11/2026): el vídeo de TMDb en el idioma original de la película, o en inglés, como la web de TMDb. Prioridad: tráiler, después teaser, después clip. No se usa si falló la red al preguntar por los de España.
 - Necesita una **clave gratuita de TMDb**, que se mete igual que la de OMDb.
 - Se puede activar o desactivar desde el asistente.
 - Riesgo: el addon de YouTube a veces pide claves propias para reproducir. Lo compruebo en la caja y, si hace falta, la guía explica cómo ponerlas.

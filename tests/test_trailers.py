@@ -128,6 +128,9 @@ class FakeWeb:
             if key not in self.titles:
                 raise IOError('404 oembed ' + key)
             return {'title': self.titles[key], 'author_name': 'canal'}
+        langs = parse_qs(parsed.query).get('include_video_language', [''])[0]
+        if (parsed.path, langs) in self.routes:  # los vídeos en otros idiomas, aparte de los en español
+            return self.routes[(parsed.path, langs)]
         if parsed.path not in self.routes:
             raise IOError('404 ' + parsed.path)
         return self.routes[parsed.path]
@@ -320,3 +323,52 @@ def test_find_trailer_without_title_does_not_search():
     post = FakePost(yt_answer(*MARFIL_SEARCH))
     assert t.find_trailer('movie', 7, 'K', web, post) is None
     assert post.calls == []
+
+
+# --- Si no hay nada en castellano: como la web de TMDb, el vídeo en el idioma original ---
+
+# Lo que tiene TMDb de "Ali G: Kién es yo?" (17/11/2026, resumido): todo en inglés.
+ALI_G = [video('ANYUtxJ4Tzo', 'en', 'US', 'Teaser', published='2026-05-01T00:00:00.000Z'),
+         video('6t7C4qaHihE', 'en', 'US', published='2026-07-01T00:00:00.000Z'),
+         video('pV32AcPa-iA', 'en', 'US', published='2026-09-01T00:00:00.000Z'),
+         video('288pl8AGwno', 'en', 'US', 'Featurette', published='2026-10-22T00:00:00.000Z')]
+
+
+def original_web(kind, tid, info, original):
+    return FakeWeb({'/3/%s/%s/videos' % (kind, tid): {'results': []}, '/3/%s/%s' % (kind, tid): info,
+                    ('/3/%s/%s/videos' % (kind, tid), '%s,en,null' % info.get('original_language')):
+                        {'results': original}}, {})
+
+
+def test_original_trailers_prefer_trailer_then_teaser_then_clip_and_original_language():
+    assert t.pick_original_trailer(ALI_G, 'en') == 'pV32AcPa-iA'  # el tráiler más nuevo, no el teaser
+    assert t.pick_original_trailer([video('clip', 'de', 'DE', 'Clip')], 'de') == 'clip'
+    assert t.pick_original_trailer([video('en', 'en', 'US'), video('de', 'de', 'DE')], 'de') == 'de'
+    assert t.pick_original_trailer([video('t', 'de', 'DE', 'Teaser'), video('en', 'en', 'US')], 'de') == 'en'
+    assert t.pick_original_trailer([video('f', 'en', 'US', 'Featurette'),
+                                    video('v', 'en', 'US', site='Vimeo')], 'en') is None
+    assert t.pick_original_trailer(None, 'en') is None
+
+
+def test_original_videos_url_asks_original_language_and_english():
+    query = parse_qs(urlparse(t.original_videos_url('movie', 5, 'de', 'K')).query)
+    assert query['include_video_language'] == ['de,en,null']
+    assert 'language' not in query
+
+
+def test_find_trailer_without_spanish_gives_the_original_like_tmdb_web():
+    web = original_web('movie', 1727734, {'title': 'Ali G: Kién es yo?', 'release_date': '2026-10-22',
+                                          'original_language': 'en'}, ALI_G)
+    assert t.find_trailer('movie', 1727734, 'K', web, FakePost(yt_answer())) == 'pV32AcPa-iA'
+    # "El regalo de cumpleaños" (Das Geschenk): en TMDb solo hay un clip alemán de Netflix.
+    web = original_web('movie', 1789549, {'title': 'El regalo de cumpleaños', 'release_date': '2026-10-30',
+                                          'original_language': 'de'}, [video('LY4rm_99fvk', 'de', 'DE', 'Clip')])
+    assert t.find_trailer('movie', 1789549, 'K', web, FakePost(None)) == 'LY4rm_99fvk'
+
+
+def test_find_trailer_spanish_teaser_still_wins_over_the_original():
+    web = original_web('movie', 1440098, {'title': 'Enfrentados: Marfil', 'release_date': '2026-09-09',
+                                          'original_language': 'en'}, ALI_G)
+    web.routes['/3/movie/1440098/videos'] = {'results': [video('tGWJVIXNcNI', vtype='Teaser')]}
+    web.titles['tGWJVIXNcNI'] = MARFIL_TEASER
+    assert t.find_trailer('movie', 1440098, 'K', web, FakePost(yt_answer())) == 'tGWJVIXNcNI'
