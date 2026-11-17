@@ -94,12 +94,24 @@ class Resolver(object):
         if not api_key or not ks.has_addon(ks.YOUTUBE):
             return None
         cache_key = (kind, tmdb_id, imdb_id, title, year)
-        if cache_key not in self.cache:
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        failed = []
+
+        def get(url):
+            try:
+                return http_get(url)
+            except Exception:
+                failed.append(url)
+                raise
+
+        tid = trailers.resolve_tmdb_id(kind, tmdb_id, imdb_id, title, year, api_key, get)
+        key = trailers.spain_trailer(kind, tid, api_key, get) if tid else None
+        if not failed:  # un fallo de red no es "no tiene tráiler": se vuelve a preguntar la próxima vez
             if len(self.cache) > 500:
                 self.cache.clear()
-            tid = trailers.resolve_tmdb_id(kind, tmdb_id, imdb_id, title, year, api_key, http_get)
-            self.cache[cache_key] = trailers.spain_trailer(kind, tid, api_key, http_get) if tid else None
-        return self.cache[cache_key]
+            self.cache[cache_key] = key
+        return key
 
 
 def main():

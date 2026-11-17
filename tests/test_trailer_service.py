@@ -183,6 +183,7 @@ def test_failed_trailer_is_forgotten_so_a_later_movie_is_never_stopped():
     run(s, k, 5)
     assert p.played and p.starts == 0
     run(s, k, 20)  # grace period passes with nothing playing
+    p.played.append('plugin://plugin.video.palantir3/?play=movie')
     p.starts, p.playing = 1, True  # dad's movie starts (windowed) while focus stays
     k.labels['ListItem.Title'] = 'Otra'
     s.tick()
@@ -483,3 +484,79 @@ def test_rows_come_back_when_a_trailer_stalls():
     w.fails = 2
     run(s, k, 1)
     assert k.dims == [True, False]
+
+
+
+# --- auditoría 1.0.3 ---------------------------------------------------------
+
+def test_trailer_that_opens_very_late_is_still_ours():
+    # En la caja la primera petición tras arrancar Kodi tardó 3 minutos en abrirse. Antes se olvidaba a los 15 s
+    # y luego, si se atascaba, nadie lo paraba.
+    w = FakeWatch()
+    s, k, p, _ = make(watch=w)
+    youtube_still_preparing(p)
+    run(s, k, 5)
+    run(s, k, 180)
+    youtube_starts(p)
+    p.pos = 3.0
+    s.tick()
+    assert k.dims == [True]  # suena como nuestro
+    w.fails = 2
+    s.tick()
+    assert p.stopped == 1
+
+
+def test_trailer_that_opens_very_late_after_moving_on_is_stopped():
+    s, k, p, _ = make()
+    youtube_still_preparing(p)
+    run(s, k, 5)
+    run(s, k, 30)
+    focus_on(k, 'Otra')
+    s.tick()
+    youtube_starts(p)
+    s.tick()
+    assert p.stopped == 1
+
+
+def test_pending_trailer_never_closes_an_unrelated_dialog():
+    s, k, p, _ = make()
+    youtube_still_preparing(p)
+    run(s, k, 5)
+    k.conds['Window.IsVisible(okdialog)'] = True  # un aviso de Palantir o BlackGhost
+    run(s, k, 3)
+    assert k.closed == 0
+    k.conds['Window.IsVisible(okdialog)'] = False
+    youtube_starts(p)
+    p.pos = 3.0
+    s.tick()
+    assert k.dims == [True]  # y el tráiler sigue siendo nuestro
+
+
+def test_autoplay_pause_after_three_stalls_lasts_half_an_hour():
+    w = FakeWatch()
+    s, k, p, _ = make(watch=w, key=lambda title: 'key-' + title)
+    for n in range(3):
+        focus_on(k, 'Peli %d' % n)
+        run(s, k, 5)
+        w.fails = 2
+        s.tick()
+    focus_on(k, 'Peli 3')
+    run(s, k, 10)
+    assert len(p.played) == 3  # en pausa
+    k.now += 31 * 60  # la caja casi nunca se reinicia: la pausa no puede ser para siempre
+    focus_on(k, 'Peli 4')
+    run(s, k, 5)
+    assert p.played[-1].endswith('key-Peli 4')
+
+
+def test_trailer_put_fullscreen_is_still_watched():
+    w = FakeWatch()
+    s, k, p, _ = make(watch=w)
+    run(s, k, 5)
+    k.conds['Window.IsActive(home)'] = False
+    k.conds['Window.IsActive(fullscreenvideo)'] = True  # tu padre lo pone a pantalla completa
+    run(s, k, 2)
+    assert p.stopped == 0  # no se le quita lo que está viendo
+    w.fails = 2  # pero si se atasca, no se queda congelado
+    s.tick()
+    assert p.stopped == 1

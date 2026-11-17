@@ -66,7 +66,7 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 |---|---|
 | No sale la nota de IMDb | Revisa la clave de OMDb (asistente → Claves). |
 | No hay tráileres | Revisa la clave de TMDb. Si YouTube pide claves propias, configúralas en los ajustes de YouTube. Algunas películas no tienen tráiler de España: es normal. |
-| El tráiler se corta a los pocos segundos | Era un fallo del addon de YouTube 7.4.4 (YouTube corta los vídeos que pide con su cliente «android_vr»). El asistente lo desactiva en ese archivo del addon (guarda el original en `addon_data/script.papa.inicio/backup/`) y lo vuelve a hacer si YouTube se reinstala. Si aun así alguno se atasca, se para solo y no se repite; con 3 seguidos, los tráileres descansan hasta que reinicies Kodi. |
+| El tráiler se corta a los pocos segundos | Era un fallo del addon de YouTube 7.4.4 (YouTube corta los vídeos que pide con su cliente «android_vr»). El asistente lo desactiva en ese archivo del addon (guarda el original en `addon_data/script.papa.inicio/backup/`) y lo vuelve a hacer si YouTube se reinstala. Si aun así alguno se atasca, se para solo y no se repite; con 3 seguidos, los tráileres descansan media hora. |
 | Las carátulas se atenúan mientras suena el tráiler | Es a propósito: así se ve el tráiler. Vuelven al tocar cualquier botón. El asistente lo añade a la skin (con copia del original) y lo repone tras cada actualización de Arctic Fuse 3, al reiniciar Kodi. |
 | Deportes vacío o con error | Seguramente ha caducado el código de BlackGhost: ábrelo una vez y pon el nuevo. |
 | El menú no ha cambiado | Reinicia Kodi. El servicio termina de montarlo al volver al Inicio. |
