@@ -435,3 +435,27 @@ def test_older_menu_also_finds_the_blackghost_rows_again(monkeypatch):
     bg = json.loads(written[ks.RUTAS])['blackghost']
     assert 'canales' in bg['deportes'] and bg['codigo'] == 'n17'
     assert flags == [True]
+
+
+def test_key_pasted_as_the_omdb_example_url_keeps_only_the_key():
+    # OMDb manda por correo "http://www.omdbapi.com/?i=tt3896198&apikey=XXXX": pegada entera, TMDb Helper daba 401.
+    assert ks.clean_key('http://www.omdbapi.com/? i=tt3896198&apikey=f525ce5d') == 'f525ce5d'
+    assert ks.clean_key('https://www.omdbapi.com/?apikey=ab12&i=tt1') == 'ab12'
+    assert ks.clean_key('  f525ce5d ') == 'f525ce5d'
+    assert ks.clean_key('') == ''
+
+
+def test_tmdbhelper_gets_the_clean_omdb_key(monkeypatch):
+    saved = {}
+
+    class Helper(object):
+        def setSettingInt(self, sid, value):
+            saved[sid] = value
+
+        def setSetting(self, sid, value):
+            saved[sid] = value
+    monkeypatch.setattr(ks, 'has_addon', lambda a: True)
+    monkeypatch.setattr(ks.xbmcaddon, 'Addon', lambda a=None: Helper())
+    monkeypatch.setattr(ks, 'setting', lambda sid: 'http://www.omdbapi.com/? i=tt3896198&apikey=f525ce5d')
+    assert ks.apply_tmdbhelper()
+    assert saved['omdb_apikey'] == 'f525ce5d'

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Todo lo que toca Kodi: JSON-RPC, diálogos, archivos, skin y ajustes de otros addons."""
 import json
+import re
 import time
 
 import xbmc
@@ -150,12 +151,19 @@ KEYS = [
 ]
 
 
+def clean_key(value):
+    """La clave sola, también si se pega el enlace de ejemplo de OMDb (http://www.omdbapi.com/?i=…&apikey=XXXX)."""
+    value = (value or '').strip()
+    found = re.search(r'apikey=([A-Za-z0-9]+)', value)
+    return found.group(1) if found else value
+
+
 def ask_keys():
     dialog = xbmcgui.Dialog()
     for sid, heading in KEYS:
-        value = dialog.input(heading, defaultt=setting(sid))
-        if value and value.strip():
-            set_setting(sid, value.strip())
+        value = clean_key(dialog.input(heading, defaultt=setting(sid)))
+        if value:
+            set_setting(sid, value)
 
 
 # - Idioma: YouTube elige la pista de audio según el suyo (en-US de fábrica) y muchos tráileres españoles traen
@@ -189,7 +197,7 @@ def apply_tmdbhelper():
         helper.setSettingInt('language', TMDBH_ES_ES)
     except Exception:
         helper.setSetting('language', str(TMDBH_ES_ES))
-    omdb = setting('omdb_key')
+    omdb = clean_key(setting('omdb_key'))
     if omdb:
         helper.setSetting('omdb_apikey', omdb)
     return True
