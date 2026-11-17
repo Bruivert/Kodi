@@ -1,3 +1,4 @@
+import json
 import os
 import py_compile
 import xml.etree.ElementTree as ET
@@ -251,16 +252,75 @@ def fake_youtube(monkeypatch, values, installed=True):
 
 def test_youtube_is_set_to_spain_spanish_so_it_never_picks_the_english_auto_dub(monkeypatch):
     # En la caja YouTube venía en en-US y "La bola negra" sonaba con el doblaje automático en inglés.
-    values = {'youtube.language': 'en-US', 'youtube.region': 'US'}
+    values = {'youtube.language': 'en-US', 'youtube.region': 'US', 'youtube.http.stream_redirect': 'false'}
     fake_youtube(monkeypatch, values)
-    assert ks.apply_youtube_spanish()
-    assert values == {'youtube.language': 'es', 'youtube.region': 'ES'}
-    assert not ks.apply_youtube_spanish()  # ya estaba
+    assert ks.apply_youtube_settings()
+    assert values['youtube.language'] == 'es' and values['youtube.region'] == 'ES'
+    assert not ks.apply_youtube_settings()  # ya estaba
 
 
-def test_youtube_spanish_leaves_an_existing_spanish_choice_and_missing_addon_alone(monkeypatch):
-    values = {'youtube.language': 'es', 'youtube.region': 'ES'}
+def test_youtube_sends_video_straight_from_google_so_stopping_a_trailer_is_instant(monkeypatch):
+    # Pasando el vídeo por su servidor interno, parar un tráiler dejaba a Kodi 20 s esperando una descarga.
+    values = {'youtube.language': 'es', 'youtube.region': 'ES', 'youtube.http.stream_redirect': 'false'}
     fake_youtube(monkeypatch, values)
-    assert not ks.apply_youtube_spanish()
+    assert ks.apply_youtube_settings()
+    assert values['youtube.http.stream_redirect'] == 'true'
+
+
+def test_youtube_settings_leave_a_ready_or_missing_addon_alone(monkeypatch):
+    values = {'youtube.language': 'es', 'youtube.region': 'ES', 'youtube.http.stream_redirect': 'true'}
+    fake_youtube(monkeypatch, values)
+    assert not ks.apply_youtube_settings()
     fake_youtube(monkeypatch, {}, installed=False)
-    assert not ks.apply_youtube_spanish()
+    assert not ks.apply_youtube_settings()
+
+
+
+def fake_menu_files(monkeypatch, files):
+    written = {}
+    monkeypatch.setattr(ks, 'read_file', lambda p: written.get(p, files.get(p, '')))
+    monkeypatch.setattr(ks, 'write_file', lambda p, t: written.__setitem__(p, t))
+    monkeypatch.setattr(ks.xbmcvfs, 'exists', lambda p: p in files or p in written)
+    monkeypatch.setattr(ks.xbmcvfs, 'listdir', lambda p: ([], []))
+    flags = []
+    monkeypatch.setattr(ks, 'set_pending', flags.append)
+    return written, flags
+
+
+RUTAS_JSON = '{"palantir": {"peliculas": {"estrenos": {"label": "Estrenos", "path": "plugin://p/estrenos"}}}}'
+
+
+def test_menu_made_by_an_older_version_is_applied_again(monkeypatch):
+    written, flags = fake_menu_files(monkeypatch, {ks.RUTAS: RUTAS_JSON, ks.MENU_VERSION_FILE: '1'})
+    assert ks.refresh_menu_if_outdated()
+    assert flags == [True]  # el servicio lo vuelve a montar al arrancar
+
+
+def test_menu_up_to_date_or_never_made_is_left_alone(monkeypatch):
+    from resources.lib import menus
+    written, flags = fake_menu_files(monkeypatch, {ks.RUTAS: RUTAS_JSON, ks.MENU_VERSION_FILE: str(menus.MENU_VERSION)})
+    assert not ks.refresh_menu_if_outdated()
+    written, flags = fake_menu_files(monkeypatch, {})  # el asistente aún no se ha usado
+    assert not ks.refresh_menu_if_outdated()
+    assert flags == []
+
+
+def test_apply_rebuilds_the_preset_from_saved_rutas_and_records_the_version(monkeypatch):
+    from resources.lib import menus
+    fake_kodi(monkeypatch, ks.SKIN, dict(CAJA, initdone=True))
+    monkeypatch.setattr(ks.xbmc, 'executebuiltin', lambda b, wait=False: None)
+    monkeypatch.setattr(ks, '_wait_for_copy', lambda: True)
+    written, _ = fake_menu_files(monkeypatch, {ks.RUTAS: RUTAS_JSON})
+    assert ks.apply_skin_config()
+    rows = json.loads(written[ks.PRESET + menus.FILE % '1101widgets'])
+    assert rows[0]['widget_sortby'] == 'track'
+    assert written[ks.MENU_VERSION_FILE] == str(menus.MENU_VERSION)
+
+
+def test_apply_never_overwrites_the_preset_without_saved_rutas(monkeypatch):
+    fake_kodi(monkeypatch, ks.SKIN, dict(CAJA, initdone=True))
+    monkeypatch.setattr(ks.xbmc, 'executebuiltin', lambda b, wait=False: None)
+    monkeypatch.setattr(ks, '_wait_for_copy', lambda: True)
+    written, _ = fake_menu_files(monkeypatch, {})
+    ks.apply_skin_config()
+    assert not [p for p in written if p.startswith(ks.PRESET)]

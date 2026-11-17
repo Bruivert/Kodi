@@ -44,7 +44,7 @@ def test_all_items_have_arctic_fuse_keys():
             if name == f('hubs'):
                 assert keys == HUB_KEYS, name
             else:
-                assert ITEM_KEYS <= keys <= ITEM_KEYS | {'widget_style'}, name
+                assert ITEM_KEYS <= keys <= ITEM_KEYS | {'widget_style', 'widget_sortby'}, name
 
 
 def test_enabled_hubs_are_the_five_sections_in_spanish():
@@ -108,7 +108,7 @@ def test_empty_rutas_only_favoritos_enabled():
     assert enabled == ['1109']
     assert files[f('1101widgets')] == []
     assert files[f('homewidgets')] == [{'label': 'Mis favoritos', 'icon': '', 'path': 'favourites://',
-                                        'target': 'videos'}]
+                                        'target': 'videos', 'widget_sortby': 'track'}]
 
 
 def test_builtins_set_imdb_ratings_and_copy_preset():
@@ -166,3 +166,15 @@ def test_write_preset_writes_json_files():
     m.write_preset({f('hubs'): [{'label': 'Películas'}]}, 'dir', lambda p, t: out.__setitem__(p, t))
     assert list(out) == ['dir/' + f('hubs')]
     assert json.loads(out['dir/' + f('hubs')]) == [{'label': 'Películas'}]
+
+
+def test_rows_have_a_fixed_order_so_kodi_does_not_reload_them_with_every_trailer():
+    # Kodi recarga las filas "sin orden" cada vez que empieza o acaba una reproducción; con las de Palantir eso
+    # tenía la CPU ocupada 15 s y el siguiente tráiler esperaba. Con un orden fijo no las recarga.
+    files = m.build_preset(RUTAS)
+    rows = [item for name, items in files.items() if name.endswith('widgets.json') for item in items]
+    assert rows and all(r.get('widget_sortby') == 'track' for r in rows)
+
+
+def test_menu_version_marks_changes_that_must_reach_existing_boxes():
+    assert m.MENU_VERSION >= 2

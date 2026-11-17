@@ -27,6 +27,7 @@ class PlayerAdapter(object):
         self.player = player
 
     def play(self, url):
+        ks.log('tráiler: se pide %s' % url.rsplit('=', 1)[-1])
         self.player.play(url, windowed=True)
 
     def stop(self):
@@ -105,8 +106,10 @@ class Resolver(object):
                 failed.append(url)
                 raise
 
+        started = time.time()
         tid = trailers.resolve_tmdb_id(kind, tmdb_id, imdb_id, title, year, api_key, get)
         key = trailers.spain_trailer(kind, tid, api_key, get) if tid else None
+        ks.log('tráiler: TMDb %.1f s → %s' % (time.time() - started, key or ('fallo de red' if failed else 'sin tráiler')))
         if not failed:  # un fallo de red no es "no tiene tráiler": se vuelve a preguntar la próxima vez
             if len(self.cache) > 500:
                 self.cache.clear()
@@ -118,7 +121,8 @@ def main():
     monitor = xbmc.Monitor()
     try:  # tras actualizarse YouTube o la skin, se vuelven a aplicar los arreglos (la skin, al siguiente arranque)
         ks.apply_patches()
-        ks.apply_youtube_spanish()
+        ks.apply_youtube_settings()
+        ks.refresh_menu_if_outdated()
     except Exception as exc:
         ks.log('arreglos: %s' % exc)
     dim_rows(False)
