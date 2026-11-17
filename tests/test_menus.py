@@ -63,6 +63,13 @@ def test_favoritos_hub_shows_kodi_favourites():
     assert 'favourites://' in [w['path'] for w in files[f('homewidgets')]]
 
 
+def test_favourites_rows_are_posters():
+    # Casi todos son películas y series: en marcos apaisados la carátula quedaba pequeña en medio.
+    files = m.build_preset(RUTAS)
+    rows = files[f('1109widgets')] + [w for w in files[f('homewidgets')] if w['path'] == 'favourites://']
+    assert len(rows) == 2 and all(r['widget_style'] == 'Poster' for r in rows)
+
+
 def test_sports_rows_follow_dad_order_with_agenda_first():
     rows = m.build_preset(RUTAS)[f('1104widgets')]
     assert [r['label'] for r in rows] == ['Agenda de hoy', 'Partidos en España', 'Fútbol', 'Baloncesto', 'NFL',
@@ -111,7 +118,7 @@ def test_empty_rutas_only_favoritos_enabled():
     assert enabled == ['1109']
     assert files[f('1101widgets')] == []
     assert files[f('homewidgets')] == [{'label': 'Mis favoritos', 'icon': '', 'path': 'favourites://',
-                                        'target': 'videos', 'widget_sortby': 'track'}]
+                                        'target': 'videos', 'widget_sortby': 'track', 'widget_style': 'Poster'}]
 
 
 def test_builtins_set_imdb_ratings_and_copy_preset():

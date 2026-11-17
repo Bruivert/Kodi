@@ -141,7 +141,7 @@ def build_preset(rutas):
         # Botones bajo el menú solo donde ahorran camino (Deportes); en el resto repetirían las filas.
         submenu = rows if win in SUBMENU else []
         files[FILE % ('%ssubmenu' % win)] = [_link(label, path, ico) for label, path, ico, _ in submenu]
-    files[FILE % '1109widgets'] = [_row('Mis favoritos', FAVOURITES)]
+    files[FILE % '1109widgets'] = [_row('Mis favoritos', FAVOURITES, 'Poster')]
     files[FILE % '1109submenu'] = []
 
     pel, ser, agenda, dep = _parts(rutas)
@@ -154,7 +154,7 @@ def build_preset(rutas):
     deportes_hoy = agenda or next((dep[k] for k in ORDEN_DEPORTES if k in dep), None)
     if deportes_hoy:
         home.append(_row('Deportes hoy', deportes_hoy['path']))
-    home.append(_row('Mis favoritos', FAVOURITES))
+    home.append(_row('Mis favoritos', FAVOURITES, 'Poster'))
     files[FILE % 'homewidgets'] = home
     files[FILE % 'homesubmenu'] = []
     return files
