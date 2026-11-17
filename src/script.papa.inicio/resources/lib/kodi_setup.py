@@ -24,6 +24,7 @@ PENDING = PROFILE + 'pendiente'
 BACKUP = PROFILE + 'backup/'
 FILAS = PROFILE + 'filas/'  # copias de las filas de Palantir (filas.py)
 FILAS_INDEX = FILAS + 'indice.json'
+ARTE = PROFILE + 'arte_deportes.json'  # fanart de TheSportsDB para Deportes (arte_deportes.py)
 MENU_VERSION_FILE = PROFILE + 'menu_version'
 # Donde BlackGhost guarda el código con el que entra sin preguntarlo (lo lee aunque sea uno temporal, como "n17").
 BG_CODE_FILE = 'special://profile/addon_data/plugin.video.blackghost/codeservernew.txt'
@@ -235,6 +236,14 @@ def save_fila(key, entry):
     index = load_fila_index()
     index[key] = {'path': entry['path'], 'time': entry['time']}
     write_file(FILAS_INDEX, json.dumps(index, ensure_ascii=False))
+
+
+def load_arte():
+    return _load_json(ARTE, {})
+
+
+def save_arte(state):
+    write_file(ARTE, json.dumps(state, ensure_ascii=False))
 
 
 def fetch_row(path):

@@ -488,3 +488,10 @@ def test_row_is_fetched_with_every_field_the_skin_shows(monkeypatch):
     assert ks.fetch_row('plugin://p/?e') == [{'a': 1}]
     assert asked == [('Files.GetDirectory', {'directory': 'plugin://p/?e', 'media': 'video',
                                              'properties': filas.FIELDS})]
+
+
+def test_sports_art_is_saved_and_read_back(monkeypatch):
+    fake_menu_files(monkeypatch, {})
+    assert ks.load_arte() == {}
+    ks.save_arte({'sports': {'Soccer': 'https://x/s.jpg'}, 'sports_time': 1})
+    assert ks.load_arte() == {'sports': {'Soccer': 'https://x/s.jpg'}, 'sports_time': 1}

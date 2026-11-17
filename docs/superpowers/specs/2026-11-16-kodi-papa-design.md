@@ -171,3 +171,25 @@ Desarrollo en la rama `claude/brave-keller-iht160`. Pages se publica desde `main
 - Los botones de Deportes siguen yendo directos a BlackGhost.
 
 **Resultado:** Favoritos con la caja en marcha, al instante (unos 0,4 s después de pulsar); recién encendida, unos 17 s.
+
+
+## Fanart en Deportes (1.0.10, 17/11/2026)
+
+BlackGhost solo trae su icono (y de fondo su logo de neón). Las tarjetas de NSPORTS (escudos, competición, hora, canal) sí son buenas. Se descartó sacar las imágenes de DAZN: no tiene API pública, raspar su web es frágil y seguramente va contra sus condiciones, y solo cubre lo que emite.
+
+**Fuente: TheSportsDB** (base de datos libre de imágenes deportivas; clave gratuita `123`). Medido el 17/11:
+- `eventsday` da solo 3 partidos por deporte; `all_leagues` 10 ligas; `all_sports` 2 deportes.
+- A las ~10 peticiones seguidas contesta 429 (Cloudflare 1015) y bloquea más de un minuto.
+- Las fotos de cada deporte son fijas (`images/sports/<deporte>.jpg`, en minúsculas con `_`) y no gastan peticiones.
+
+**Qué fondo lleva cada partido** (`arte_deportes.py`, en `plugin.py` al servir las filas `deportes.*`):
+1. Primero se averigua el deporte con palabras clave, iniciales de tenistas, «CB», «BM» y clubes ACB. Así «Hockey Champions League» no es la Champions de fútbol.
+2. Luego, la competición de ese deporte nombrada en el partido. Se mira solo la parte en negrita (la agenda pone detrás el canal, p. ej. «Movistar Liga de Campeones») y la sinopsis de NSPORTS («League: …»).
+3. Si no hay competición: el deporte, el de la fila (Fútbol, Motor) o fútbol.
+4. Cada partido usa siempre la misma de las hasta 4 imágenes de su competición.
+5. La tarjeta de NSPORTS pasa a `landscape`; si no, la skin pondría el fanart en la tarjeta.
+
+**Descargas** (`arte_deportes.Fetcher` en el servicio):
+- Las competiciones (lista `LEAGUES`) se piden por id con `lookupleague`: una por minuto, empezando 3 min tras arrancar.
+- Se guardan una semana en `arte_deportes.json`. Si contesta 429, espera una hora.
+- Solo se usan si el nombre devuelto coincide con el esperado. Comprobados a mano: 4480, 4481, 5071, 4490, 4335, 4400, 4483, 4496, 4429.

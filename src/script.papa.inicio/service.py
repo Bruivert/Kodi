@@ -9,7 +9,7 @@ import xbmcgui
 import xbmcvfs
 
 from resources.lib import kodi_setup as ks
-from resources.lib import filas, patches, trailers
+from resources.lib import arte_deportes, filas, patches, trailers
 from resources.lib.trailer_service import LogWatch, TrailerAutoplay
 
 
@@ -166,6 +166,9 @@ def main():
     refresher = filas.Refresher(lambda: filas.row_paths(ks.load_rutas()), ks.load_fila_index, ks.fetch_row,
                                 ks.save_fila, lambda: xbmc.getCondVisibility(
                                     'System.IdleTime(20) + !Window.IsActive(fullscreenvideo)'), time.time)
+    # Fondos de Deportes: de TheSportsDB, una petición por minuto como mucho (su clave gratuita deja muy pocas).
+    arte = arte_deportes.Fetcher(ks.load_arte, ks.save_arte, http_get, lambda: xbmc.getCondVisibility(
+        '!Window.IsActive(fullscreenvideo)'), time.time)
     last_check = 0.0
     fallos = 0  # cada intento recarga la skin: no insistir sin fin
     while not monitor.abortRequested():
@@ -193,6 +196,12 @@ def main():
                 ks.log('fila %s pedida a Palantir' % renewed)
         except Exception as exc:
             ks.log('filas: %s' % exc)
+        try:
+            asked = arte.tick()
+            if asked:
+                ks.log('fondos de deportes: competición %s pedida a TheSportsDB' % asked)
+        except Exception as exc:
+            ks.log('fondos de deportes: %s' % exc)
         try:
             autoplay.tick()
         except Exception as exc:  # un fallo de red o de un tráiler no debe tumbar el servicio

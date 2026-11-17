@@ -15,6 +15,7 @@ import xbmc
 import xbmcgui
 import xbmcplugin
 
+from resources.lib import arte_deportes
 from resources.lib import favoritos as fv
 from resources.lib import filas
 from resources.lib import kodi_setup as ks
@@ -119,6 +120,8 @@ def listar_fila(handle, key):
             cached = filas.entry(path, files, time.time())
             ks.save_fila(key, cached)
     items = (cached or {}).get('items') or []
+    if key.startswith('deportes.'):  # BlackGhost no trae fondos: los de TheSportsDB
+        items = arte_deportes.apply(items, key, ks.load_arte())
     for item in items:
         xbmcplugin.addDirectoryItem(handle, item['path'], _fila_item(item), isFolder=item['folder'])
     xbmcplugin.setContent(handle, filas.content(items))
