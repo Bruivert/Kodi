@@ -243,9 +243,15 @@ def _write_preset(rutas):
 
 
 def refresh_menu_if_outdated():
-    """Si el menú lo montó una versión con otro formato, se deja pendiente para que el servicio lo rehaga."""
-    if not load_rutas() or read_file(MENU_VERSION_FILE).strip() == str(menus.MENU_VERSION):
+    """Si el menú lo montó una versión con otro formato, se deja pendiente para que el servicio lo rehaga. Antes se
+    vuelven a buscar las listas de Palantir, que cambian ("Más vistas" pasó a pedir Trakt); BlackGhost no se toca."""
+    rutas = load_rutas()
+    if not rutas or read_file(MENU_VERSION_FILE).strip() == str(menus.MENU_VERSION):
         return False
+    pal = discover.discover_palantir(list_dir, find_addon, lambda title, labels: -1)  # sin preguntar nada
+    if pal and (pal.get('peliculas') or pal.get('series')):
+        rutas['palantir'] = pal
+        write_file(RUTAS, json.dumps(rutas, indent=2, ensure_ascii=False))
     set_pending(True)
     return True
 

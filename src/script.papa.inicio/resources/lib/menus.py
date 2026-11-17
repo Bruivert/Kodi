@@ -3,13 +3,14 @@
 órdenes de skin que lo aplican. Puro: sin Kodi."""
 import json
 
-from resources.lib.discover import DEPORTES
+from resources.lib.discover import DEPORTES, needs_trakt
 
 SKIN = 'skin.arctic.fuse.3'
 FILE = 'skinvariables-shortcut-%s.json'
 FAVOURITES = 'favourites://'
 # Súbelo cuando cambie el formato del menú: las cajas que ya lo tienen montado lo vuelven a aplicar al arrancar.
-MENU_VERSION = 2
+# 3: filas sin las listas de Palantir que piden Trakt ("Más vistas"), con "Recién añadidas" y "Nuevas series".
+MENU_VERSION = 3
 # Kodi recarga las filas "sin orden" cada vez que empieza o acaba cualquier reproducción (para actualizar lo
 # visto). Con las de Palantir eso ocupaba Python 15 s tras cada tráiler y el siguiente esperaba. Con un orden fijo
 # no las recarga; "track" no cambia nada en películas y series (todas valen 0) y se respeta el orden de Palantir.
@@ -83,10 +84,15 @@ def _first(group, *keys):
     return None
 
 
+def _usable(group):
+    # Las rutas guardadas por versiones anteriores pueden traer listas de Palantir que ahora piden Trakt.
+    return {key: item for key, item in (group or {}).items() if not needs_trakt(item.get('label'))}
+
+
 def _parts(rutas):
     pal = rutas.get('palantir') or {}
     bg = rutas.get('blackghost') or {}
-    return pal.get('peliculas') or {}, pal.get('series') or {}, bg.get('agenda'), bg.get('deportes') or {}
+    return _usable(pal.get('peliculas')), _usable(pal.get('series')), bg.get('agenda'), bg.get('deportes') or {}
 
 
 def _sections(rutas):
@@ -97,11 +103,12 @@ def _sections(rutas):
         return [(label, group[k]['path'], ico, style) for k, label, ico in spec if k in group]
 
     generos = [('generos', 'Géneros', 'genre')]
-    pel_rows = pick(pel, [('estrenos', 'Estrenos', 'recentlyadded'), ('populares', 'Populares', 'fire-flame-curved'),
-                          ('valoradas', 'Mejor valoradas', 'star')], 'Poster') + pick(pel, generos, None)
-    ser_rows = pick(ser, [('novedades', 'Nuevos episodios', 'recentlyadded'), ('emision', 'En emisión', 'tv'),
+    pel_rows = pick(pel, [('estrenos', 'Estrenos', 'recentlyadded'), ('recientes', 'Recién añadidas', 'film'),
                           ('populares', 'Populares', 'fire-flame-curved'), ('valoradas', 'Mejor valoradas', 'star')],
-                    'Poster') + pick(ser, generos, None)
+                    'Poster') + pick(pel, generos, None)
+    ser_rows = pick(ser, [('novedades', 'Nuevos episodios', 'recentlyadded'), ('nuevas', 'Nuevas series', 'tv'),
+                          ('emision', 'En emisión', 'tv'), ('populares', 'Populares', 'fire-flame-curved'),
+                          ('valoradas', 'Mejor valoradas', 'star')], 'Poster') + pick(ser, generos, None)
     nov_rows = []
     if 'estrenos' in pel:
         nov_rows.append(('Estrenos de cine', pel['estrenos']['path'], 'film', 'Poster'))
@@ -154,6 +161,14 @@ def _quote(value):
     return '"%s"' % value
 
 
+def _named(group, *choices):
+    """(lista, nombre) de la primera que exista de (clave, nombre), o (None, '')."""
+    for key, label in choices:
+        if key in group:
+            return group[key], label
+    return None, ''
+
+
 def _spotlight(window, item, label):
     out = ['Skin.Reset(HomeSwitcher.%s.Spotlight.%s)' % (window, k) for k in SPOTLIGHT_KEYS]
     if item:
@@ -172,9 +187,12 @@ def skin_builtins(rutas, preset_folder, now, first_run=False):
     for win, kind, mode in HUB_TYPES:
         out += ['Skin.SetString(HomeSwitcher.%s.Type,%s)' % (win, kind),
                 'Skin.SetString(HomeSwitcher.%s.Mode,%s)' % (win, mode)]
-    out += _spotlight('Home', _first(pel, 'estrenos', 'populares'), 'Estrenos')
-    out += _spotlight('1101', _first(pel, 'populares', 'estrenos'), 'Populares')
-    out += _spotlight('1102', _first(ser, 'populares', 'novedades', 'emision'), 'Populares')
+    out += _spotlight('Home', *_named(pel, ('estrenos', 'Estrenos'), ('recientes', 'Recién añadidas'),
+                                      ('populares', 'Populares')))
+    out += _spotlight('1101', *_named(pel, ('populares', 'Populares'), ('recientes', 'Recién añadidas'),
+                                      ('estrenos', 'Estrenos')))
+    out += _spotlight('1102', *_named(ser, ('populares', 'Populares'), ('nuevas', 'Nuevas series'),
+                                      ('novedades', 'Nuevos episodios'), ('emision', 'En emisión')))
     out += _spotlight('1103', _first(pel, 'estrenos') or _first(ser, 'novedades', 'emision'), 'Novedades')
     out += _spotlight('1104', agenda, 'Agenda de hoy')
     out += _spotlight('1109', None, '')

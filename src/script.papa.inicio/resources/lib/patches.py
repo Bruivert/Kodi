@@ -25,6 +25,30 @@ _ROWS_GROUP = re.compile(r'^([ \t]*)<control type="group" id="500">\n([ \t]*)', 
 _OUR_LINES = re.compile(r'^[ \t]*<animation [^\n]*<!-- %s -->\n' % re.escape(MARK), re.M)
 
 
+# Arctic Fuse 3 se actualiza sola y deja el archivo de las filas como venía, y Kodi recarga la skin sin el fundido.
+# El servicio lo vuelve a arreglar cada poco y recarga la skin cuando nadie está usando Kodi.
+CHECK_EVERY = 10 * 60.0
+QUIET = '!Player.HasMedia + !System.HasActiveModalDialog + System.IdleTime(300)'
+
+
+class PatchKeeper(object):
+    """apply() aplica los arreglos que falten y devuelve los addons tocados; reload_skin() recarga la skin."""
+
+    def __init__(self, apply, cond, reload_skin, clock, skin):
+        self.apply, self.cond, self.reload_skin, self.clock, self.skin = apply, cond, reload_skin, clock, skin
+        self.next_check, self.reload_pending = 0.0, False
+
+    def tick(self):
+        now = self.clock()
+        if now >= self.next_check:
+            self.next_check = now + CHECK_EVERY
+            if self.skin in self.apply():
+                self.reload_pending = True  # Kodi ya tiene cargada la skin sin el arreglo
+        if self.reload_pending and self.cond(QUIET):
+            self.reload_pending = False
+            self.reload_skin()
+
+
 def youtube_needs_patch(version):
     return version in YOUTUBE_BROKEN
 

@@ -130,3 +130,47 @@ def test_skipping_required_folder_leaves_category_absent():
 
 def test_missing_addon_returns_none():
     assert d.discover_palantir(list_dir, lambda k: None, never_ask) is None
+
+
+# --- Palantir 3.3.11 tal como está en la caja (17/11/2026) ---
+
+def _menu(prefix, labels):
+    return [entry(label, PAL + '?%s=%d' % (prefix, i)) for i, label in enumerate(labels)]
+
+
+REAL_PELIS = _menu('p', ['Novedades', 'Últimas añadidas', 'Recomendadas', 'Más vistas', 'Más vistas este mes', 'Sagas',
+                         'Especiales', 'Buscar:', 'Por título', 'Por géneros', 'Por orden alfabético', 'Por año',
+                         'Por calidad'])
+REAL_SERIES = _menu('s', ['Últimas actualizaciones', 'Nuevas series', 'Series en seguimiento', 'Recomendadas',
+                          'Más vistas', 'Más vistas este mes', 'Clásicas', 'Reality', 'Buscar:', 'Por título',
+                          'Por géneros', 'Por año', 'Por orden alfabético'])
+REAL_TREE = {PAL: [entry('Favoritos', PAL + '?m=fav'), entry('Películas', PAL + '?m=pelis'),
+                   entry('Series', PAL + '?m=series'), entry('Listas Trakt.tv', PAL + '?m=trakt')],
+             PAL + '?m=pelis': REAL_PELIS, PAL + '?m=series': REAL_SERIES}
+
+
+def labels_of(group):
+    return {key: item['label'] for key, item in group.items()}
+
+
+def test_trakt_only_lists_are_recognised():
+    for label in ('Más vistas', '[COLOR gold]Más vistas este mes[/COLOR]', 'Recomendadas', 'Series en seguimiento',
+                  'Listas Trakt.tv'):
+        assert d.needs_trakt(label), label
+    for label in ('Novedades', 'Últimas añadidas', 'Nuevas series', 'Por géneros', 'Populares', ''):
+        assert not d.needs_trakt(label), label
+
+
+def test_real_palantir_rows_never_use_lists_that_need_trakt():
+    # "Más vistas" pide una cuenta de Trakt: sin ella salían avisos que bloqueaban el mando y la fila quedaba vacía.
+    out = d.discover_palantir(lambda p: REAL_TREE.get(p, []), find_addon, never_ask)
+    assert labels_of(out['peliculas']) == {'estrenos': 'Novedades', 'recientes': 'Últimas añadidas',
+                                           'generos': 'Por géneros'}
+    assert labels_of(out['series']) == {'novedades': 'Últimas actualizaciones', 'nuevas': 'Nuevas series',
+                                         'generos': 'Por géneros'}
+
+
+def test_estrenos_is_not_the_recently_added_list_whatever_the_order():
+    pelis = [entry('Últimas añadidas', PAL + '?p=add'), entry('Novedades', PAL + '?p=new')]
+    out = d.classify(pelis, d.PELICULAS)
+    assert out['estrenos']['path'] == PAL + '?p=new' and out['recientes']['path'] == PAL + '?p=add'
