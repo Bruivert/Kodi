@@ -43,8 +43,15 @@ def test_settings_have_keys_and_trailer_switch():
     assert {'tmdb_key', 'omdb_key', 'trailers_auto', 'bg_codigo'} <= ids
 
 
+def test_addon_lists_favourites_as_a_video_plugin():
+    root = ET.parse(os.path.join(ADDON_DIR, 'addon.xml')).getroot()
+    plugin = [e for e in root.iter('extension') if e.get('point') == 'xbmc.python.pluginsource']
+    assert len(plugin) == 1 and plugin[0].get('library') == 'plugin.py'
+    assert plugin[0].find('provides').text == 'video'
+
+
 def test_entry_points_compile():
-    for name in ('default.py', 'service.py'):
+    for name in ('default.py', 'service.py', 'plugin.py'):
         py_compile.compile(os.path.join(ADDON_DIR, name), doraise=True)
 
 

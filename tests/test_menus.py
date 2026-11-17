@@ -57,26 +57,40 @@ def test_enabled_hubs_are_the_five_sections_in_spanish():
     assert {h['window'] for h in hubs} == {'1101', '1102', '1103', '1104', '1106', '1107', '1108', '1109'}
 
 
-def test_favoritos_hub_shows_kodi_favourites():
+FAVORITOS = 'plugin://script.papa.inicio/?lista=favoritos'
+
+
+def test_favoritos_hub_shows_kodi_favourites_with_their_tmdb_art():
+    # favourites:// no trae fanart ni ficha: los da la lista del asistente.
     files = m.build_preset(RUTAS)
-    assert [w['path'] for w in files[f('1109widgets')]] == ['favourites://']
-    assert 'favourites://' in [w['path'] for w in files[f('homewidgets')]]
+    assert [w['path'] for w in files[f('1109widgets')]] == [FAVORITOS]
+
+
+def test_favourites_are_the_first_row_of_inicio():
+    # Kodi pide las filas en orden y de pocas en pocas: la primera sale enseguida al encender.
+    assert [w['label'] for w in m.build_preset(RUTAS)[f('homewidgets')]] == [
+        'Mis favoritos', 'Estrenos', 'Series nuevas', 'Deportes hoy']
+    assert m.build_preset(RUTAS)[f('homewidgets')][0]['path'] == FAVORITOS
 
 
 def test_favourites_rows_are_posters():
     # Casi todos son películas y series: en marcos apaisados la carátula quedaba pequeña en medio.
     files = m.build_preset(RUTAS)
-    rows = files[f('1109widgets')] + [w for w in files[f('homewidgets')] if w['path'] == 'favourites://']
+    rows = files[f('1109widgets')] + [w for w in files[f('homewidgets')] if w['path'] == FAVORITOS]
     assert len(rows) == 2 and all(r['widget_style'] == 'Poster' for r in rows)
 
 
-def test_sports_rows_follow_dad_order_with_agenda_first():
+def test_sports_rows_are_few_and_buttons_reach_every_sport():
+    # Cada fila de BlackGhost tarda 3-7 s y las demás secciones esperan a que acaben: solo 5 filas. Los botones bajo
+    # el menú no cargan nada hasta pulsarlos y llevan a todo.
     rows = m.build_preset(RUTAS)[f('1104widgets')]
-    assert [r['label'] for r in rows] == ['Agenda de hoy', 'Partidos en España', 'Fútbol', 'Baloncesto', 'NFL',
-                                          'Motor: F1 y MotoGP', 'Fórmula 1 en español', 'UFC y boxeo',
+    assert [r['label'] for r in rows] == ['Agenda de hoy', 'Partidos en España', 'Fútbol', 'Motor: F1 y MotoGP',
                                           'Canales Acestream']
     sub = m.build_preset(RUTAS)[f('1104submenu')]
-    assert [s['path'] for s in sub] == [r['path'] for r in rows]
+    assert [s['label'] for s in sub] == ['Agenda de hoy', 'Partidos en España', 'Fútbol', 'Baloncesto', 'NFL',
+                                         'Motor: F1 y MotoGP', 'Fórmula 1 en español', 'UFC y boxeo',
+                                         'Canales Acestream']
+    assert sub[3]['path'] == BG + 'nba'
 
 
 def test_movies_rows_are_posters_from_palantir():
@@ -92,7 +106,7 @@ def test_submenus_only_in_deportes():
     files = m.build_preset(RUTAS)
     for win in ('1101', '1102', '1103', '1109'):
         assert files[f('%ssubmenu' % win)] == [], win
-    assert [s['path'] for s in files[f('1104submenu')]] == [r['path'] for r in files[f('1104widgets')]]
+    assert files[f('1104submenu')]
 
 
 def test_series_generos_row_last_only_when_palantir_has_it():
@@ -117,7 +131,7 @@ def test_empty_rutas_only_favoritos_enabled():
     enabled = [h['window'] for h in files[f('hubs')] if h['disabled'] != 'True']
     assert enabled == ['1109']
     assert files[f('1101widgets')] == []
-    assert files[f('homewidgets')] == [{'label': 'Mis favoritos', 'icon': '', 'path': 'favourites://',
+    assert files[f('homewidgets')] == [{'label': 'Mis favoritos', 'icon': '', 'path': FAVORITOS,
                                         'target': 'videos', 'widget_sortby': 'track', 'widget_style': 'Poster'}]
 
 

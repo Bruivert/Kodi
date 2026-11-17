@@ -80,6 +80,7 @@ Supuesto (lo indicó al principio): Palantir y BlackGhost ya están instalados y
 - Necesito el informe de diagnóstico de la caja para cerrar esta parte. Hasta entonces Deportes funciona metiendo el código a mano.
 
 ### 4. Favoritos
+- **Cambio de la 1.0.10:** la fila no lee `favourites://` (solo trae nombre y miniatura: sin fanart ni ficha, la sección salía con fondo liso). La da `plugin://script.papa.inicio/?lista=favoritos` (plugin.py): lee favourites.xml y, a los que tienen año (los de Palantir), les pone la ficha de TMDb (`search/multi`, título y año; tipo, id, fanart, sinopsis), guardada en `favoritos_tmdb.json`. Al pulsar hace lo mismo que el favorito (carpeta, PlayMedia u orden). "Mis favoritos" es la primera fila de Inicio: Kodi carga las filas de 3 en 3 y en orden, y pasar por las secciones con el foco encarga todas sus filas (por eso Deportes tiene 5 filas y el resto en botones).
 - Se usan los favoritos nativos de Kodi (`favourites://`). Sirven igual para películas y series de Palantir que para canales o eventos de BlackGhost.
 - Nueva sección **Favoritos** en el menú (Inicio · Películas · Series · Novedades · Deportes · Favoritos) y una fila "Mis favoritos" en Inicio.
   - Usará un hub libre de Arctic Fuse 3, por ejemplo el 1108 con `HomeSwitcher.1108.Type=Custom`. Lo confirmo al implementar.

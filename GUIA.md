@@ -5,7 +5,7 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 **Inicio · Películas · Series · Novedades · Deportes · Favoritos**
 
 - Películas, Series y Novedades salen de **Palantir** (con tu AllDebrid).
-- Deportes sale de **BlackGhost**: Agenda de hoy (en hora de España), Partidos en España (Acestream), Fútbol, Baloncesto, NFL, Motor (F1 y MotoGP), Fórmula 1 en español (repeticiones), UFC y boxeo, y Canales Acestream. BlackGhost no tiene pádel.
+- Deportes sale de **BlackGhost**. Filas: Agenda de hoy (en hora de España), Partidos en España (Acestream), Fútbol, Motor (F1 y MotoGP) y Canales Acestream. Con los botones bajo el menú se llega además a Baloncesto, NFL, Fórmula 1 en español (repeticiones) y UFC y boxeo. BlackGhost no tiene pádel.
 - Nota de **IMDb** en películas y series.
 - **Tráileres automáticos en español de España**: si tu padre se queda unos segundos sobre una película, suena su tráiler de fondo. Si no hay ninguno en castellano, suena el de la web de TMDb en el idioma original (casi siempre inglés), como cuando miras la película en el móvil.
 
@@ -51,7 +51,7 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 | Ver algo | **OK** |
 | Volver | **Atrás** |
 | Guardarlo en Favoritos | Mantener pulsado **OK** (o el botón ☰) → **Añadir a favoritos** |
-| Ver mis favoritos | Sección **Favoritos** o la fila **Mis favoritos** del Inicio |
+| Ver mis favoritos | La primera fila del Inicio, **Mis favoritos**, o la sección **Favoritos** (el corazón). Las películas y series salen con su fanart de fondo, como en Películas. |
 
 ## 5. Mantenimiento (abre el asistente)
 

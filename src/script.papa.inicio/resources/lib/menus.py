@@ -7,11 +7,13 @@ from resources.lib.discover import DEPORTES, needs_trakt
 
 SKIN = 'skin.arctic.fuse.3'
 FILE = 'skinvariables-shortcut-%s.json'
-FAVOURITES = 'favourites://'
+# Los favoritos de Kodi con su fanart y ficha de TMDb (plugin.py del asistente): favourites:// no los trae.
+FAVOURITES = 'plugin://script.papa.inicio/?lista=favoritos'
 # Súbelo cuando cambie el formato del menú: las cajas que ya lo tienen montado lo vuelven a aplicar al arrancar.
 # 3: filas sin las listas de Palantir que piden Trakt ("Más vistas"), con "Recién añadidas" y "Nuevas series".
 # 4: Deportes con las agendas reales de BlackGhost (no tiene carpetas por deporte).
-MENU_VERSION = 4
+# 5: "Mis favoritos" primera fila de Inicio y con fanart (plugin.py); Deportes con 5 filas.
+MENU_VERSION = 5
 # Kodi recarga las filas "sin orden" cada vez que empieza o acaba cualquier reproducción (para actualizar lo
 # visto). Con las de Palantir eso ocupaba Python 15 s tras cada tráiler y el siguiente esperaba. Con un orden fijo
 # no las recarga; "track" no cambia nada en películas y series (todas valen 0) y se respeta el orden de Palantir.
@@ -20,6 +22,9 @@ ROW_SORT = 'track'
 # Filas de Deportes bajo la agenda: lo de España primero y luego los deportes que nombró tu padre (BlackGhost no
 # tiene pádel; F1 y MotoGP van juntos en "Motor").
 ORDEN_DEPORTES = ['espana', 'futbol', 'baloncesto', 'nfl', 'motor', 'f1', 'ufc', 'canales']
+# Las que además son fila. Cada fila de BlackGhost tarda 3-7 s y Kodi las pide de pocas en pocas, en una sola cola
+# para todas las secciones: con las 9, Favoritos esperaba medio minuto. Los botones bajo el menú llevan a todas.
+FILAS_DEPORTES = ['agenda', 'espana', 'futbol', 'motor', 'canales']
 
 ICONOS_DEPORTES = {
     'agenda': 'calendar-day', 'espana': 'flag', 'futbol': 'futbol', 'baloncesto': 'basketball',
@@ -127,6 +132,10 @@ def _sections(rutas):
     return {'1101': pel_rows, '1102': ser_rows, '1103': nov_rows, '1104': dep_rows}
 
 
+def _is_row(win, label):
+    return win != '1104' or label in [DEPORTES[k]['label'] for k in FILAS_DEPORTES]
+
+
 def build_preset(rutas):
     files = {}
     sections = _sections(rutas)
@@ -137,7 +146,8 @@ def build_preset(rutas):
         for win, slot, label, ico in HUBS
     ]
     for win, rows in sections.items():
-        files[FILE % ('%swidgets' % win)] = [_row(label, path, style) for label, path, _, style in rows]
+        files[FILE % ('%swidgets' % win)] = [_row(label, path, style) for label, path, _, style in rows
+                                             if _is_row(win, label)]
         # Botones bajo el menú solo donde ahorran camino (Deportes); en el resto repetirían las filas.
         submenu = rows if win in SUBMENU else []
         files[FILE % ('%ssubmenu' % win)] = [_link(label, path, ico) for label, path, ico, _ in submenu]
@@ -145,7 +155,7 @@ def build_preset(rutas):
     files[FILE % '1109submenu'] = []
 
     pel, ser, agenda, dep = _parts(rutas)
-    home = []
+    home = [_row('Mis favoritos', FAVOURITES, 'Poster')]  # la primera: sale enseguida al encender
     if 'estrenos' in pel:
         home.append(_row('Estrenos', pel['estrenos']['path'], 'Poster'))
     serie_nueva = _first(ser, 'novedades', 'emision')
@@ -154,7 +164,6 @@ def build_preset(rutas):
     deportes_hoy = agenda or next((dep[k] for k in ORDEN_DEPORTES if k in dep), None)
     if deportes_hoy:
         home.append(_row('Deportes hoy', deportes_hoy['path']))
-    home.append(_row('Mis favoritos', FAVOURITES, 'Poster'))
     files[FILE % 'homewidgets'] = home
     files[FILE % 'homesubmenu'] = []
     return files
