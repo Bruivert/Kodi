@@ -52,8 +52,9 @@ def test_all_items_have_arctic_fuse_keys():
 def test_enabled_hubs_are_the_five_sections_in_spanish():
     hubs = m.build_preset(RUTAS)[f('hubs')]
     enabled = [(h['window'], h['label']) for h in hubs if h['disabled'] != 'True']
-    assert enabled == [('1101', 'Películas'), ('1102', 'Series'), ('1103', 'Novedades'),
-                       ('1104', 'Deportes'), ('1109', 'Favoritos')]
+    # AF3 pone las secciones activas en el orden de la lista: Favoritos antes que Deportes (al pasar por Películas y
+    # Series le da tiempo a cargar) y sin Novedades, que repetía Estrenos y Series nuevas de Inicio.
+    assert enabled == [('1101', 'Películas'), ('1102', 'Series'), ('1109', 'Favoritos'), ('1104', 'Deportes')]
     assert {h['window'] for h in hubs} == {'1101', '1102', '1103', '1104', '1106', '1107', '1108', '1109'}
 
 
@@ -66,11 +67,10 @@ def test_favoritos_hub_shows_kodi_favourites_with_their_tmdb_art():
     assert [w['path'] for w in files[f('1109widgets')]] == [FAVORITOS]
 
 
-def test_favourites_are_the_first_row_of_inicio():
-    # Kodi pide las filas en orden y de pocas en pocas: la primera sale enseguida al encender.
+def test_inicio_starts_with_estrenos_and_ends_with_favourites():
     assert [w['label'] for w in m.build_preset(RUTAS)[f('homewidgets')]] == [
-        'Mis favoritos', 'Estrenos', 'Series nuevas', 'Deportes hoy']
-    assert m.build_preset(RUTAS)[f('homewidgets')][0]['path'] == FAVORITOS
+        'Estrenos', 'Series nuevas', 'Deportes hoy', 'Mis favoritos']
+    assert m.build_preset(RUTAS)[f('homewidgets')][-1]['path'] == FAVORITOS
 
 
 def test_favourites_rows_are_posters():

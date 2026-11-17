@@ -13,7 +13,8 @@ FAVOURITES = 'plugin://script.papa.inicio/?lista=favoritos'
 # 3: filas sin las listas de Palantir que piden Trakt ("Más vistas"), con "Recién añadidas" y "Nuevas series".
 # 4: Deportes con las agendas reales de BlackGhost (no tiene carpetas por deporte).
 # 5: "Mis favoritos" primera fila de Inicio y con fanart (plugin.py); Deportes con 5 filas.
-MENU_VERSION = 5
+# 6: Inicio · Películas · Series · Favoritos · Deportes (sin Novedades); Estrenos otra vez primera fila de Inicio.
+MENU_VERSION = 6
 # Kodi recarga las filas "sin orden" cada vez que empieza o acaba cualquier reproducción (para actualizar lo
 # visto). Con las de Palantir eso ocupaba Python 15 s tras cada tráiler y el siguiente esperaba. Con un orden fijo
 # no las recarga; "track" no cambia nada en películas y series (todas valen 0) y se respeta el orden de Palantir.
@@ -33,16 +34,20 @@ ICONOS_DEPORTES = {
 }
 
 # (ventana, slot, etiqueta, icono). 1106-1108 se dejan como en la skin, desactivadas.
+# AF3 coloca las activas en este orden: las 4 primeras como texto, el resto como iconos a la derecha. Favoritos va
+# antes que Deportes: al pasar por Películas y Series le da tiempo a cargar (el usuario lo prefiere así a tenerla
+# primera). Novedades queda apagada: repetía Estrenos y Series nuevas de Inicio.
 HUBS = [
     ('1101', '01', 'Películas', 'film'),
     ('1102', '02', 'Series', 'tv'),
-    ('1103', '03', 'Novedades', 'recentlyadded'),
+    ('1109', '09', 'Favoritos', 'heart'),
     ('1104', '04', 'Deportes', 'trophy'),
+    ('1103', '03', 'Novedades', 'recentlyadded'),
     ('1106', '06', '$LOCALIZE[31605]', 'calendar'),
     ('1107', '07', '$LOCALIZE[31085] / PVR', 'livetv'),
     ('1108', '08', '$LOCALIZE[24001]', 'addon'),
-    ('1109', '09', 'Favoritos', 'heart'),
 ]
+APAGADAS = {'1103'}
 
 HUB_TYPES = [
     ('1101', 'Custom', 'Standard'), ('1102', 'Custom', 'Standard'), ('1103', 'Custom', 'Standard'),
@@ -139,7 +144,7 @@ def _is_row(win, label):
 def build_preset(rutas):
     files = {}
     sections = _sections(rutas)
-    enabled = {'1109'} | {w for w, rows in sections.items() if rows}
+    enabled = ({'1109'} | {w for w, rows in sections.items() if rows}) - APAGADAS
     files[FILE % 'hubs'] = [
         {'label': label, 'icon': icon(ico), 'path': '', 'target': '', 'window': win, 'slot': slot,
          'disabled': '' if win in enabled else 'True'}
@@ -155,7 +160,7 @@ def build_preset(rutas):
     files[FILE % '1109submenu'] = []
 
     pel, ser, agenda, dep = _parts(rutas)
-    home = [_row('Mis favoritos', FAVOURITES, 'Poster')]  # la primera: sale enseguida al encender
+    home = []
     if 'estrenos' in pel:
         home.append(_row('Estrenos', pel['estrenos']['path'], 'Poster'))
     serie_nueva = _first(ser, 'novedades', 'emision')
@@ -164,6 +169,7 @@ def build_preset(rutas):
     deportes_hoy = agenda or next((dep[k] for k in ORDEN_DEPORTES if k in dep), None)
     if deportes_hoy:
         home.append(_row('Deportes hoy', deportes_hoy['path']))
+    home.append(_row('Mis favoritos', FAVOURITES, 'Poster'))
     files[FILE % 'homewidgets'] = home
     files[FILE % 'homesubmenu'] = []
     return files
