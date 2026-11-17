@@ -192,7 +192,7 @@ def test_apply_patches_leaves_fixed_youtube_versions_and_missing_addons_alone(mo
 
 
 
-def fresh_service(monkeypatch, http):
+def fresh_service(monkeypatch, http, post=lambda url, payload: {}):
     import importlib
     import sys
     sys.modules.pop('service', None)
@@ -200,6 +200,7 @@ def fresh_service(monkeypatch, http):
     monkeypatch.setattr(service.ks, 'setting', lambda sid: 'clave')
     monkeypatch.setattr(service.ks, 'has_addon', lambda a: True)
     monkeypatch.setattr(service, 'http_get', http)
+    monkeypatch.setattr(service, 'http_post', post)
     return service
 
 
@@ -230,8 +231,28 @@ def test_movie_without_spain_trailer_is_not_asked_again(monkeypatch):
         return {'results': []}
     resolver = fresh_service(monkeypatch, none).Resolver()
     assert resolver('movie', '603', '', 'Matrix', '1999') is None
+    asked = len(calls)
     assert resolver('movie', '603', '', 'Matrix', '1999') is None
-    assert len(calls) == 1
+    assert len(calls) == asked
+
+
+def test_youtube_search_is_retried_after_a_network_failure(monkeypatch):
+    from tests.test_trailers import yt_answer
+    searches = []
+
+    def tmdb(url):
+        return {'title': 'Allen', 'release_date': '2026-11-12'} if '/movie/603?' in url else {'results': []}
+
+    def youtube(url, payload):
+        searches.append(payload['query'])
+        if len(searches) == 1:
+            raise OSError('sin red')
+        return yt_answer(('allen', 'Allen - Tráiler español', 'CineTrailer', '2:24'))
+    resolver = fresh_service(monkeypatch, tmdb, youtube).Resolver()
+    assert resolver('movie', '603', '', 'Allen', '2026') is None
+    assert resolver('movie', '603', '', 'Allen', '2026') == 'allen'
+    assert resolver('movie', '603', '', 'Allen', '2026') == 'allen'
+    assert searches == ['Allen 2026 tráiler español'] * 2
 
 
 class FakeAddon(object):
