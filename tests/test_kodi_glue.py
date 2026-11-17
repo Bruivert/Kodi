@@ -188,3 +188,45 @@ def test_apply_patches_leaves_fixed_youtube_versions_and_missing_addons_alone(mo
     written = fake_addons(monkeypatch, {YT_PATH: YOUTUBE}, {'plugin.video.youtube': '7.4.5'})
     assert ks.apply_patches() == []
     assert written == {}
+
+
+
+def fresh_service(monkeypatch, http):
+    import importlib
+    import sys
+    sys.modules.pop('service', None)
+    service = importlib.import_module('service')
+    monkeypatch.setattr(service.ks, 'setting', lambda sid: 'clave')
+    monkeypatch.setattr(service.ks, 'has_addon', lambda a: True)
+    monkeypatch.setattr(service, 'http_get', http)
+    return service
+
+
+SPAIN = {'results': [{'site': 'YouTube', 'type': 'Trailer', 'iso_639_1': 'es', 'iso_3166_1': 'ES', 'key': 'abc'}]}
+
+
+def test_trailer_lookup_is_retried_after_a_network_failure(monkeypatch):
+    calls = []
+
+    def flaky(url):
+        calls.append(url)
+        if len(calls) == 1:
+            raise OSError('sin red')  # la Wi-Fi aún no ha arrancado
+        return SPAIN
+    resolver = fresh_service(monkeypatch, flaky).Resolver()
+    assert resolver('movie', '603', '', 'Matrix', '1999') is None
+    assert resolver('movie', '603', '', 'Matrix', '1999') == 'abc'
+    assert resolver('movie', '603', '', 'Matrix', '1999') == 'abc'
+    assert len(calls) == 2  # lo bueno sí se guarda
+
+
+def test_movie_without_spain_trailer_is_not_asked_again(monkeypatch):
+    calls = []
+
+    def none(url):
+        calls.append(url)
+        return {'results': []}
+    resolver = fresh_service(monkeypatch, none).Resolver()
+    assert resolver('movie', '603', '', 'Matrix', '1999') is None
+    assert resolver('movie', '603', '', 'Matrix', '1999') is None
+    assert len(calls) == 1

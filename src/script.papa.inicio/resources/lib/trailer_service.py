@@ -11,12 +11,12 @@ from resources.lib.trailers import youtube_url
 WINDOWS = ('home', '1101', '1102', '1103', '1104', '1109')
 KINDS = {'movie': 'movie', 'tvshow': 'tv'}
 DELAY = 4.0
-GRACE = 15.0  # si nuestro tráiler no ha empezado en este tiempo, lo damos por fallido
 # YouTube (cliente ANDROID_VR del addon 7.4.4) corta a veces el audio con 403 a los pocos segundos. Kodi se
 # queda con la imagen congelada y sigue contando tiempo, así que hay que mirar los fallos de descarga.
 STALL_FAILS = 2     # fallos de descarga desde que empezó el tráiler: se ha atascado
 OVERRUN = 5.0       # segundos de más sobre la duración: también atascado (red de seguridad)
-MAX_STALLS = 3      # atascos seguidos: YouTube no funciona, no lo intentamos más hasta reiniciar Kodi
+MAX_STALLS = 3      # atascos seguidos: YouTube no funciona, se descansa un rato
+PAUSE = 30 * 60.0   # la caja casi nunca se reinicia: la pausa no puede ser hasta el siguiente arranque
 GOOD_AFTER = 15.0   # segundos sin fallos para dar YouTube por bueno otra vez
 ERROR_WINDOW = 5.0  # si YouTube no pudo abrir nuestro tráiler, el "Error de reproducción" de Kodi sale enseguida
 DIM_AFTER = 1.5     # segundos de tráiler antes de atenuar las filas de carátulas
@@ -73,13 +73,13 @@ class TrailerAutoplay(object):
         self.since = 0.0
         self.done_for = None
         self.expect = None  # nº de reproducciones que habrá cuando empiece nuestro tráiler
-        self.requested_at = 0.0
         self.key = None
         self.cancel = False  # el foco se fue antes de que empezara: pararlo en cuanto empiece
         self.opening = False  # Kodi está abriendo nuestro tráiler
         self.failed_at = None
         self.stalled = set()  # tráileres que se atascaron: no se repiten
         self.streak = 0
+        self.gave_up_at = 0.0
 
     def _focus(self):
         if self.cond('System.HasActiveModalDialog'):
@@ -106,10 +106,12 @@ class TrailerAutoplay(object):
         if self._pending() and not self._ours():
             self.cancel = True  # olvidarlo ahora lo dejaría sonando (o congelado) sin que nadie lo pare
             return
-        # Solo paramos nuestro tráiler; nunca lo que tu padre haya puesto ni lo que va a pantalla completa.
-        if self._ours() and not self.cond('Window.IsActive(fullscreenvideo)'):
+        if not self._ours():
+            self.expect = None
+        elif not self.cond('Window.IsActive(fullscreenvideo)'):
             self.player.stop()
-        self.expect = None
+            self.expect = None
+        # A pantalla completa lo está viendo tu padre: no se le quita, pero se sigue vigilando por si se atasca.
 
     def _check_stall(self):
         if not self._ours():
@@ -126,13 +128,21 @@ class TrailerAutoplay(object):
         self.expect, self.cancel, self.opening = None, False, False
         self.stalled.add(self.key)
         self.streak += 1
+        self.gave_up_at = self.clock()
+
+    def _paused(self, now):
+        if self.streak >= MAX_STALLS and now - self.gave_up_at >= PAUSE:
+            self.streak = 0  # pasada la pausa, se vuelve a probar
+        return self.streak >= MAX_STALLS
 
     def _check_failed_open(self, now):
         if self._pending():
             if self.player.is_playing():
                 self.opening = True
-            elif self.opening or self.cond('Window.IsVisible(okdialog)'):
-                self._give_up()  # Kodi no pudo abrirlo
+            elif self.opening:
+                # Kodi lo estaba abriendo y lo cerró sin empezar. Un aviso cualquiera mientras YouTube aún prepara
+                # el vídeo no cuenta: puede ser de Palantir o de BlackGhost y tu padre tiene que leerlo.
+                self._give_up()
                 self.failed_at = now
         if self.failed_at is not None:
             if now - self.failed_at > ERROR_WINDOW:
@@ -149,9 +159,9 @@ class TrailerAutoplay(object):
 
     def tick(self):
         focus, now = self._focus(), self.clock()
+        # Lo pedido no se olvida nunca, aunque YouTube tarde minutos (la clave impide confundirlo con otra cosa):
+        # si se abre tarde y el foco sigue ahí, se vigila; si el foco se fue, se para en cuanto se abra.
         self._check_failed_open(now)
-        if self._pending() and now - self.requested_at > GRACE and not self.player.is_playing():
-            self.expect, self.cancel = None, False  # YouTube no llegó a reproducirlo (mientras abre, se espera)
         if self.cancel and self._ours():
             self.player.stop()
             self.expect, self.cancel = None, False
@@ -166,7 +176,7 @@ class TrailerAutoplay(object):
         if focus is None or self.done_for == focus or now - self.since < self.delay:
             return
         self.done_for = focus
-        if (not self.enabled() or self.streak >= MAX_STALLS or self.player.is_playing()
+        if (not self.enabled() or self._paused(now) or self.player.is_playing()
                 or self.cond('Window.IsActive(fullscreenvideo)')):
             return
         key = self.resolve(*focus)
@@ -175,4 +185,4 @@ class TrailerAutoplay(object):
         before = self.player.started_count()
         self.watch.mark()
         self.player.play(youtube_url(key))
-        self.expect, self.requested_at, self.key, self.cancel, self.opening = before + 1, now, key, False, False
+        self.expect, self.key, self.cancel, self.opening = before + 1, key, False, False
