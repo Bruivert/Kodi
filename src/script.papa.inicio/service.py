@@ -67,6 +67,11 @@ def dim_rows(on):
         home.clearProperty(patches.TRAILER_PROPERTY)
 
 
+def reload_skin():
+    ks.log('skin recargada para que vuelva el fundido de las filas')
+    xbmc.executebuiltin('ReloadSkin()')
+
+
 HEADERS = {'Accept': 'application/json', 'User-Agent': 'KodiPapa/1.0'}
 
 
@@ -133,8 +138,7 @@ class Resolver(object):
 
 def main():
     monitor = xbmc.Monitor()
-    try:  # tras actualizarse YouTube o la skin, se vuelven a aplicar los arreglos (la skin, al siguiente arranque)
-        ks.apply_patches()
+    try:
         ks.apply_youtube_settings()
         ks.refresh_menu_if_outdated()
     except Exception as exc:
@@ -144,6 +148,8 @@ def main():
                                Resolver(), lambda: ks.setting('trailers_auto') != 'false', time.time,
                                watch=LogWatch(xbmcvfs.translatePath('special://logpath/kodi.log')),
                                close_error=lambda: xbmc.executebuiltin('Dialog.Close(okdialog)'), dim=dim_rows)
+    # Tras actualizarse YouTube o la skin (también con Kodi encendido) se vuelven a aplicar los arreglos.
+    keeper = patches.PatchKeeper(ks.apply_patches, xbmc.getCondVisibility, reload_skin, time.time, ks.SKIN)
     last_check = 0.0
     fallos = 0  # cada intento recarga la skin: no insistir sin fin
     while not monitor.abortRequested():
@@ -155,6 +161,10 @@ def main():
                 ks.log('el menú no se copió (intento %d)' % fallos)
                 if fallos == 3:
                     ks.notify('No se pudo montar el menú. Reinicia Kodi.', 8000)
+        try:
+            keeper.tick()
+        except Exception as exc:
+            ks.log('arreglos: %s' % exc)
         try:
             autoplay.tick()
         except Exception as exc:  # un fallo de red o de un tráiler no debe tumbar el servicio

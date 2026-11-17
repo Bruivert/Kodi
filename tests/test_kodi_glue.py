@@ -312,10 +312,36 @@ def fake_menu_files(monkeypatch, files):
 RUTAS_JSON = '{"palantir": {"peliculas": {"estrenos": {"label": "Estrenos", "path": "plugin://p/estrenos"}}}}'
 
 
+def fake_palantir(monkeypatch, tree):
+    from tests.test_discover import find_addon
+    monkeypatch.setattr(ks, 'list_dir', lambda path: tree.get(path, []))
+    monkeypatch.setattr(ks, 'find_addon', find_addon)
+
+
 def test_menu_made_by_an_older_version_is_applied_again(monkeypatch):
     written, flags = fake_menu_files(monkeypatch, {ks.RUTAS: RUTAS_JSON, ks.MENU_VERSION_FILE: '1'})
+    fake_palantir(monkeypatch, {})  # Palantir no contesta: se rehace con las rutas guardadas
     assert ks.refresh_menu_if_outdated()
     assert flags == [True]  # el servicio lo vuelve a montar al arrancar
+    assert ks.RUTAS not in written
+
+
+OLD_RUTAS = {'palantir': {'id': 'plugin.video.palantir3',
+                          'peliculas': {'populares': {'label': 'Más vistas', 'path': 'plugin://p/mas-vistas'}}},
+             'blackghost': {'id': 'plugin.video.blackghost', 'agenda': {'label': 'Agenda', 'path': 'plugin://bg/a'}}}
+
+
+def test_older_menu_looks_for_palantir_lists_again(monkeypatch):
+    # Palantir cambia: "Más vistas" ahora pide Trakt. Al actualizar, el servicio vuelve a buscar sus listas.
+    from tests.test_discover import REAL_TREE
+    written, flags = fake_menu_files(monkeypatch, {ks.RUTAS: json.dumps(OLD_RUTAS), ks.MENU_VERSION_FILE: '2'})
+    fake_palantir(monkeypatch, REAL_TREE)
+    assert ks.refresh_menu_if_outdated()
+    rutas = json.loads(written[ks.RUTAS])
+    assert rutas['palantir']['peliculas']['recientes']['label'] == 'Últimas añadidas'
+    assert 'populares' not in rutas['palantir']['peliculas']
+    assert rutas['blackghost'] == OLD_RUTAS['blackghost']  # lo demás no se toca
+    assert flags == [True]
 
 
 def test_menu_up_to_date_or_never_made_is_left_alone(monkeypatch):

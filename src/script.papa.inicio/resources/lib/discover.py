@@ -41,19 +41,32 @@ PALANTIR_ROOT = {
     'series': _cat('Series', ['serie', 'tv show', 'tvshow', 'shows']),
 }
 
+# Listas de Palantir que solo funcionan con una cuenta de Trakt.tv: sin ella preguntan "¿desea activarla ahora?",
+# luego "No se han encontrado resultados", y los avisos bloquean el mando (Palantir 3.3.11, noviembre de 2026).
+TRAKT_ONLY = ['mas vistas', 'recomendad', 'seguimiento', 'trakt']
+
+
+def needs_trakt(label):
+    return matches(label, TRAKT_ONLY)
+
+
 PELICULAS = {
-    'estrenos': _cat('Estrenos', ['estreno', 'en cines', 'cartelera', 'novedad', 'ultimas', 'recien']),
-    'populares': _cat('Populares', ['popular', 'tendencia', 'trending', 'mas vistas']),
-    'valoradas': _cat('Mejor valoradas', ['valorad', 'mejor', 'top']),
-    'generos': _cat('Géneros', ['genero', 'categoria']),
+    'estrenos': _cat('Estrenos', ['estreno', 'en cines', 'cartelera', 'novedad', 'ultimas', 'recien'],
+                     exclude=TRAKT_ONLY + ['anadid']),
+    'recientes': _cat('Recién añadidas', ['anadid', 'recently added'], exclude=TRAKT_ONLY),
+    'populares': _cat('Populares', ['popular', 'tendencia', 'trending'], exclude=TRAKT_ONLY),
+    'valoradas': _cat('Mejor valoradas', ['valorad', 'mejor', 'top'], exclude=TRAKT_ONLY),
+    'generos': _cat('Géneros', ['genero', 'categoria'], exclude=TRAKT_ONLY),
 }
 
 SERIES = {
-    'novedades': _cat('Novedades', ['novedad', 'estreno', 'nuevos episodios', 'ultimos episodios', 'ultimas']),
-    'emision': _cat('En emisión', ['emision', 'en antena', 'airing', 'al aire']),
-    'populares': _cat('Populares', ['popular', 'tendencia', 'trending', 'mas vistas']),
-    'valoradas': _cat('Mejor valoradas', ['valorad', 'mejor', 'top']),
-    'generos': _cat('Géneros', ['genero', 'categoria']),
+    'novedades': _cat('Novedades', ['novedad', 'estreno', 'nuevos episodios', 'ultimos episodios', 'ultimas'],
+                      exclude=TRAKT_ONLY),
+    'nuevas': _cat('Nuevas series', ['nuevas series', 'series nuevas', 'nueva serie'], exclude=TRAKT_ONLY),
+    'emision': _cat('En emisión', ['emision', 'en antena', 'airing', 'al aire'], exclude=TRAKT_ONLY),
+    'populares': _cat('Populares', ['popular', 'tendencia', 'trending'], exclude=TRAKT_ONLY),
+    'valoradas': _cat('Mejor valoradas', ['valorad', 'mejor', 'top'], exclude=TRAKT_ONLY),
+    'generos': _cat('Géneros', ['genero', 'categoria'], exclude=TRAKT_ONLY),
 }
 
 DEPORTES_ROOT = {

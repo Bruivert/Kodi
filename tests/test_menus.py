@@ -178,3 +178,48 @@ def test_rows_have_a_fixed_order_so_kodi_does_not_reload_them_with_every_trailer
 
 def test_menu_version_marks_changes_that_must_reach_existing_boxes():
     assert m.MENU_VERSION >= 2
+
+
+def test_menu_version_marks_the_rows_without_trakt():
+    assert m.MENU_VERSION >= 3
+
+
+# Rutas de Palantir 3.3.11 tal como las encuentra ahora el asistente (sin las listas que piden Trakt).
+RUTAS_SIN_TRAKT = {'palantir': {
+    'id': 'plugin.video.palantir3',
+    'peliculas': {'estrenos': it('Novedades', PAL + 'p_new'), 'recientes': it('Últimas añadidas', PAL + 'p_add'),
+                  'generos': it('Por géneros', PAL + 'p_gen')},
+    'series': {'novedades': it('Últimas actualizaciones', PAL + 's_upd'), 'nuevas': it('Nuevas series', PAL + 's_new'),
+               'generos': it('Por géneros', PAL + 's_gen')},
+}}
+
+
+def test_rows_use_recently_added_movies_and_new_series():
+    files = m.build_preset(RUTAS_SIN_TRAKT)
+    assert [(r['label'], r['path']) for r in files[f('1101widgets')]] == [
+        ('Estrenos', PAL + 'p_new'), ('Recién añadidas', PAL + 'p_add'), ('Géneros', PAL + 'p_gen')]
+    assert [(r['label'], r['path']) for r in files[f('1102widgets')]] == [
+        ('Nuevos episodios', PAL + 's_upd'), ('Nuevas series', PAL + 's_new'), ('Géneros', PAL + 's_gen')]
+    assert all(r['widget_style'] == 'Poster' for r in files[f('1101widgets')][:2] + files[f('1102widgets')][:2])
+
+
+def test_spotlights_name_the_list_they_show():
+    b = m.skin_builtins(RUTAS_SIN_TRAKT, 'x/', 'now')
+    assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Path,"%sp_add")' % PAL in b
+    assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Label,Recién añadidas)' in b
+    assert 'Skin.SetString(HomeSwitcher.1102.Spotlight.Path,"%ss_new")' % PAL in b
+    assert 'Skin.SetString(HomeSwitcher.1102.Spotlight.Label,Nuevas series)' in b
+    assert 'Skin.SetString(HomeSwitcher.Home.Spotlight.Label,Estrenos)' in b
+
+
+def test_saved_trakt_only_lists_are_left_out():
+    # Una caja montada con una versión anterior guardó "Más vistas" como Populares.
+    rutas = json.loads(json.dumps(RUTAS))
+    rutas['palantir']['peliculas']['populares'] = it('Más vistas', PAL + 'p_most')
+    rutas['palantir']['series']['populares'] = it('Más vistas', PAL + 's_most')
+    files = m.build_preset(rutas)
+    paths = [r['path'] for name, rows in files.items() for r in rows]
+    assert PAL + 'p_most' not in paths and PAL + 's_most' not in paths
+    b = m.skin_builtins(rutas, 'x/', 'now')
+    assert not [x for x in b if 'p_most' in x or 's_most' in x]
+    assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Label,Estrenos)' in b

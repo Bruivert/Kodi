@@ -96,3 +96,63 @@ def test_af3_patch_upgrades_the_old_partial_fade():
     assert new == pt.patch_af3_rows(AF3)
     assert 'end="25"' not in new
     assert pt.patch_af3_rows(new) is None
+
+
+class FakeKodi:
+    def __init__(self, touched):
+        self.touched, self.now, self.quiet = list(touched), 0.0, False
+        self.applied, self.reloads = 0, 0
+
+    def apply(self):
+        self.applied += 1
+        return self.touched.pop(0) if self.touched else []
+
+    def cond(self, expr):
+        assert expr == pt.QUIET
+        return self.quiet
+
+    def reload(self):
+        self.reloads += 1
+
+
+def keeper(kodi):
+    return pt.PatchKeeper(kodi.apply, kodi.cond, kodi.reload, lambda: kodi.now, 'skin.arctic.fuse.3')
+
+
+def test_keeper_patches_at_start_and_then_every_ten_minutes():
+    kodi = FakeKodi([[], [], []])
+    k = keeper(kodi)
+    k.tick()
+    assert kodi.applied == 1
+    kodi.now = pt.CHECK_EVERY - 1
+    k.tick()
+    assert kodi.applied == 1
+    kodi.now = pt.CHECK_EVERY
+    k.tick()
+    assert kodi.applied == 2
+    assert kodi.reloads == 0
+
+
+def test_keeper_reloads_the_skin_only_when_nobody_is_using_kodi():
+    # La skin se actualizó sola y Kodi ya la tiene cargada: el fundido no se ve hasta recargarla.
+    kodi = FakeKodi([['skin.arctic.fuse.3']])
+    k = keeper(kodi)
+    k.tick()
+    assert kodi.reloads == 0  # tu padre está usando Kodi
+    kodi.quiet = True
+    k.tick()
+    k.tick()
+    assert kodi.reloads == 1
+
+
+def test_keeper_does_not_reload_for_youtube_alone():
+    kodi = FakeKodi([['plugin.video.youtube']])
+    kodi.quiet = True
+    k = keeper(kodi)
+    k.tick()
+    assert kodi.reloads == 0  # el arreglo de YouTube vale en el siguiente vídeo
+
+
+def test_keeper_waits_while_something_plays_a_dialog_is_open_or_the_remote_is_in_use():
+    for atom in ('!Player.HasMedia', '!System.HasActiveModalDialog', 'System.IdleTime(300)'):
+        assert atom in [a.strip() for a in pt.QUIET.split('+')]
