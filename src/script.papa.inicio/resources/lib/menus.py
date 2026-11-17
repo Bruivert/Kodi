@@ -8,6 +8,12 @@ from resources.lib.discover import DEPORTES
 SKIN = 'skin.arctic.fuse.3'
 FILE = 'skinvariables-shortcut-%s.json'
 FAVOURITES = 'favourites://'
+# Súbelo cuando cambie el formato del menú: las cajas que ya lo tienen montado lo vuelven a aplicar al arrancar.
+MENU_VERSION = 2
+# Kodi recarga las filas "sin orden" cada vez que empieza o acaba cualquier reproducción (para actualizar lo
+# visto). Con las de Palantir eso ocupaba Python 15 s tras cada tráiler y el siguiente esperaba. Con un orden fijo
+# no las recarga; "track" no cambia nada en películas y series (todas valen 0) y se respeta el orden de Palantir.
+ROW_SORT = 'track'
 
 # Orden en el que tu padre nombró los deportes.
 ORDEN_DEPORTES = ['futbol', 'baloncesto', 'nfl', 'padel', 'f1', 'motogp', 'ufc']
@@ -60,7 +66,7 @@ def icon(name):
 
 
 def _row(label, path, style=None):
-    item = {'label': label, 'icon': '', 'path': path, 'target': 'videos'}
+    item = {'label': label, 'icon': '', 'path': path, 'target': 'videos', 'widget_sortby': ROW_SORT}
     if style:
         item['widget_style'] = style
     return item

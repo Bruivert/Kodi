@@ -27,6 +27,7 @@ class PlayerAdapter(object):
         self.player = player
 
     def play(self, url):
+        ks.log('tráiler: se pide %s' % url.rsplit('=', 1)[-1])
         self.player.play(url, windowed=True)
 
     def stop(self):
@@ -69,7 +70,7 @@ def dim_rows(on):
 HEADERS = {'Accept': 'application/json', 'User-Agent': 'KodiPapa/1.0'}
 
 
-def http_get(url):
+def http_get(url, payload=None):
     # requests trae sus certificados (certifi): el Python de Kodi en Android a veces no tiene los del sistema.
     # Se importa aquí para que, si faltara, solo se pierdan los tráileres y no el resto del servicio.
     try:
@@ -77,12 +78,22 @@ def http_get(url):
     except ImportError:
         requests = None
     if requests is not None:
-        response = requests.get(url, headers=HEADERS, timeout=5)
+        if payload is None:
+            response = requests.get(url, headers=HEADERS, timeout=5)
+        else:
+            response = requests.post(url, json=payload, headers=HEADERS, timeout=5)
         response.raise_for_status()
         return response.json()
     from urllib.request import Request, urlopen
-    with urlopen(Request(url, headers=HEADERS), timeout=5) as response:
+    data, headers = None, HEADERS
+    if payload is not None:
+        data, headers = json.dumps(payload).encode('utf-8'), dict(HEADERS, **{'Content-Type': 'application/json'})
+    with urlopen(Request(url, data=data, headers=headers), timeout=5) as response:
         return json.loads(response.read().decode('utf-8'))
+
+
+def http_post(url, payload):
+    return http_get(url, payload)
 
 
 class Resolver(object):
@@ -98,15 +109,21 @@ class Resolver(object):
             return self.cache[cache_key]
         failed = []
 
-        def get(url):
-            try:
-                return http_get(url)
-            except Exception:
-                failed.append(url)
-                raise
+        def noting_failures(request):
+            def call(url, *payload):
+                try:
+                    return request(url, *payload)
+                except Exception:
+                    failed.append(url)
+                    raise
+            return call
+        get, post = noting_failures(http_get), noting_failures(http_post)
 
+        started = time.time()
         tid = trailers.resolve_tmdb_id(kind, tmdb_id, imdb_id, title, year, api_key, get)
-        key = trailers.spain_trailer(kind, tid, api_key, get) if tid else None
+        key = trailers.find_trailer(kind, tid, api_key, get, post) if tid else None
+        ks.log('tráiler: buscado en %.1f s → %s' % (time.time() - started,
+                                                    key or ('fallo de red' if failed else 'sin tráiler')))
         if not failed:  # un fallo de red no es "no tiene tráiler": se vuelve a preguntar la próxima vez
             if len(self.cache) > 500:
                 self.cache.clear()
@@ -118,6 +135,8 @@ def main():
     monitor = xbmc.Monitor()
     try:  # tras actualizarse YouTube o la skin, se vuelven a aplicar los arreglos (la skin, al siguiente arranque)
         ks.apply_patches()
+        ks.apply_youtube_settings()
+        ks.refresh_menu_if_outdated()
     except Exception as exc:
         ks.log('arreglos: %s' % exc)
     dim_rows(False)

@@ -1,3 +1,4 @@
+import json
 import os
 import py_compile
 import xml.etree.ElementTree as ET
@@ -191,7 +192,7 @@ def test_apply_patches_leaves_fixed_youtube_versions_and_missing_addons_alone(mo
 
 
 
-def fresh_service(monkeypatch, http):
+def fresh_service(monkeypatch, http, post=lambda url, payload: {}):
     import importlib
     import sys
     sys.modules.pop('service', None)
@@ -199,6 +200,7 @@ def fresh_service(monkeypatch, http):
     monkeypatch.setattr(service.ks, 'setting', lambda sid: 'clave')
     monkeypatch.setattr(service.ks, 'has_addon', lambda a: True)
     monkeypatch.setattr(service, 'http_get', http)
+    monkeypatch.setattr(service, 'http_post', post)
     return service
 
 
@@ -216,8 +218,9 @@ def test_trailer_lookup_is_retried_after_a_network_failure(monkeypatch):
     resolver = fresh_service(monkeypatch, flaky).Resolver()
     assert resolver('movie', '603', '', 'Matrix', '1999') is None
     assert resolver('movie', '603', '', 'Matrix', '1999') == 'abc'
+    asked = len(calls)
     assert resolver('movie', '603', '', 'Matrix', '1999') == 'abc'
-    assert len(calls) == 2  # lo bueno sí se guarda
+    assert len(calls) == asked  # lo bueno sí se guarda
 
 
 def test_movie_without_spain_trailer_is_not_asked_again(monkeypatch):
@@ -228,5 +231,118 @@ def test_movie_without_spain_trailer_is_not_asked_again(monkeypatch):
         return {'results': []}
     resolver = fresh_service(monkeypatch, none).Resolver()
     assert resolver('movie', '603', '', 'Matrix', '1999') is None
+    asked = len(calls)
     assert resolver('movie', '603', '', 'Matrix', '1999') is None
-    assert len(calls) == 1
+    assert len(calls) == asked
+
+
+def test_youtube_search_is_retried_after_a_network_failure(monkeypatch):
+    from tests.test_trailers import yt_answer
+    searches = []
+
+    def tmdb(url):
+        return {'title': 'Allen', 'release_date': '2026-11-12'} if '/movie/603?' in url else {'results': []}
+
+    def youtube(url, payload):
+        searches.append(payload['query'])
+        if len(searches) == 1:
+            raise OSError('sin red')
+        return yt_answer(('allen', 'Allen - Tráiler español', 'CineTrailer', '2:24'))
+    resolver = fresh_service(monkeypatch, tmdb, youtube).Resolver()
+    assert resolver('movie', '603', '', 'Allen', '2026') is None
+    assert resolver('movie', '603', '', 'Allen', '2026') == 'allen'
+    assert resolver('movie', '603', '', 'Allen', '2026') == 'allen'
+    assert searches == ['Allen 2026 tráiler español'] * 2
+
+
+class FakeAddon(object):
+    def __init__(self, values):
+        self.values = values
+
+    def getSetting(self, sid):
+        return self.values.get(sid, '')
+
+    def setSetting(self, sid, value):
+        self.values[sid] = value
+
+
+def fake_youtube(monkeypatch, values, installed=True):
+    monkeypatch.setattr(ks, 'has_addon', lambda a: installed and a == ks.YOUTUBE)
+    monkeypatch.setattr(ks.xbmcaddon, 'Addon', lambda addon_id=None: FakeAddon(values))
+    monkeypatch.setattr(ks, 'log', lambda msg: None)
+
+
+def test_youtube_is_set_to_spain_spanish_so_it_never_picks_the_english_auto_dub(monkeypatch):
+    # En la caja YouTube venía en en-US y "La bola negra" sonaba con el doblaje automático en inglés.
+    values = {'youtube.language': 'en-US', 'youtube.region': 'US', 'youtube.http.stream_redirect': 'false'}
+    fake_youtube(monkeypatch, values)
+    assert ks.apply_youtube_settings()
+    assert values['youtube.language'] == 'es' and values['youtube.region'] == 'ES'
+    assert not ks.apply_youtube_settings()  # ya estaba
+
+
+def test_youtube_sends_video_straight_from_google_so_stopping_a_trailer_is_instant(monkeypatch):
+    # Pasando el vídeo por su servidor interno, parar un tráiler dejaba a Kodi 20 s esperando una descarga.
+    values = {'youtube.language': 'es', 'youtube.region': 'ES', 'youtube.http.stream_redirect': 'false'}
+    fake_youtube(monkeypatch, values)
+    assert ks.apply_youtube_settings()
+    assert values['youtube.http.stream_redirect'] == 'true'
+
+
+def test_youtube_settings_leave_a_ready_or_missing_addon_alone(monkeypatch):
+    values = {'youtube.language': 'es', 'youtube.region': 'ES', 'youtube.http.stream_redirect': 'true'}
+    fake_youtube(monkeypatch, values)
+    assert not ks.apply_youtube_settings()
+    fake_youtube(monkeypatch, {}, installed=False)
+    assert not ks.apply_youtube_settings()
+
+
+
+def fake_menu_files(monkeypatch, files):
+    written = {}
+    monkeypatch.setattr(ks, 'read_file', lambda p: written.get(p, files.get(p, '')))
+    monkeypatch.setattr(ks, 'write_file', lambda p, t: written.__setitem__(p, t))
+    monkeypatch.setattr(ks.xbmcvfs, 'exists', lambda p: p in files or p in written)
+    monkeypatch.setattr(ks.xbmcvfs, 'listdir', lambda p: ([], []))
+    flags = []
+    monkeypatch.setattr(ks, 'set_pending', flags.append)
+    return written, flags
+
+
+RUTAS_JSON = '{"palantir": {"peliculas": {"estrenos": {"label": "Estrenos", "path": "plugin://p/estrenos"}}}}'
+
+
+def test_menu_made_by_an_older_version_is_applied_again(monkeypatch):
+    written, flags = fake_menu_files(monkeypatch, {ks.RUTAS: RUTAS_JSON, ks.MENU_VERSION_FILE: '1'})
+    assert ks.refresh_menu_if_outdated()
+    assert flags == [True]  # el servicio lo vuelve a montar al arrancar
+
+
+def test_menu_up_to_date_or_never_made_is_left_alone(monkeypatch):
+    from resources.lib import menus
+    written, flags = fake_menu_files(monkeypatch, {ks.RUTAS: RUTAS_JSON, ks.MENU_VERSION_FILE: str(menus.MENU_VERSION)})
+    assert not ks.refresh_menu_if_outdated()
+    written, flags = fake_menu_files(monkeypatch, {})  # el asistente aún no se ha usado
+    assert not ks.refresh_menu_if_outdated()
+    assert flags == []
+
+
+def test_apply_rebuilds_the_preset_from_saved_rutas_and_records_the_version(monkeypatch):
+    from resources.lib import menus
+    fake_kodi(monkeypatch, ks.SKIN, dict(CAJA, initdone=True))
+    monkeypatch.setattr(ks.xbmc, 'executebuiltin', lambda b, wait=False: None)
+    monkeypatch.setattr(ks, '_wait_for_copy', lambda: True)
+    written, _ = fake_menu_files(monkeypatch, {ks.RUTAS: RUTAS_JSON})
+    assert ks.apply_skin_config()
+    rows = json.loads(written[ks.PRESET + menus.FILE % '1101widgets'])
+    assert rows[0]['widget_sortby'] == 'track'
+    assert written[ks.MENU_VERSION_FILE] == str(menus.MENU_VERSION)
+
+
+def test_apply_never_overwrites_the_preset_without_saved_rutas(monkeypatch):
+    fake_kodi(monkeypatch, ks.SKIN, dict(CAJA, initdone=True))
+    monkeypatch.setattr(ks.xbmc, 'executebuiltin', lambda b, wait=False: None)
+    monkeypatch.setattr(ks, '_wait_for_copy', lambda: True)
+    written, _ = fake_menu_files(monkeypatch, {})
+    ks.apply_skin_config()
+    assert not [p for p in written if p.startswith(ks.PRESET)]

@@ -87,3 +87,236 @@ def test_spain_trailer_end_to_end_and_errors():
 
 def test_youtube_url():
     assert t.youtube_url('abc') == 'plugin://plugin.video.youtube/play/?video_id=abc'
+
+
+# Títulos reales en YouTube de los tráileres que eligió TMDb como es-ES en la caja (17/11/2026).
+SPANISH_TITLES = [
+    'La bola negra: Tráiler oficial | Movistar Plus',
+    'VERITY. LA SOMBRA DE UN ENGAÑO | Téaser Tráiler Oficial en español. 2 de octubre en cines.',
+    'En el corazón de la bestia | Tráiler Oficial | Paramount Pictures Spain',
+    'Prácticamente magia 2 | Tráiler Oficial',
+    'LA MANGOSTA Tráiler Español Oficial (2026) Liam Neeson, Acción',
+    'Puño de león - Tráiler español',
+    'Resident Evil | Nuevo Tráiler Oficial en español HD. En cines 18 de septiembre.',
+    'Matchbox: la película — Tráiler oficial | Apple TV',
+]
+# Para "Enfrentados: Marfil", TMDb da como es-ES este teaser inglés.
+MARFIL = 'Drawn Together - Official Teaser | Prime Video Canada'
+
+
+def test_looks_english_only_for_english_or_subtitled_titles():
+    assert not any(t.looks_english(x) for x in SPANISH_TITLES)
+    assert t.looks_english(MARFIL)
+    assert t.looks_english('Tráiler oficial subtitulado')  # se oye el original, en inglés
+    assert t.looks_english('Matchbox - Tráiler VOSE')
+    assert not t.looks_english('Official Trailer (Español)')  # mezcla, pero dice que es en español
+    assert not t.looks_english('')
+    assert not t.looks_english(None)
+
+
+class FakeWeb:
+    """TMDb por ruta y YouTube (oEmbed) por clave de vídeo."""
+
+    def __init__(self, routes, titles):
+        self.routes, self.titles, self.calls = routes, titles, []
+
+    def __call__(self, url):
+        self.calls.append(url)
+        parsed = urlparse(url)
+        if parsed.path == '/oembed':
+            key = parse_qs(parsed.query)['url'][0].rsplit('v=', 1)[-1]
+            if key not in self.titles:
+                raise IOError('404 oembed ' + key)
+            return {'title': self.titles[key], 'author_name': 'canal'}
+        if parsed.path not in self.routes:
+            raise IOError('404 ' + parsed.path)
+        return self.routes[parsed.path]
+
+
+def test_english_trailer_mislabelled_as_spain_spanish_is_skipped():
+    vids = [video('lc7LU9fhgG0', size=2160), video('bueno', size=1080)]
+    web = FakeWeb({'/3/movie/1440098/videos': {'results': vids}},
+                  {'lc7LU9fhgG0': MARFIL, 'bueno': 'Enfrentados: Marfil | Tráiler oficial'})
+    assert t.spain_trailer('movie', 1440098, 'K', web) == 'bueno'
+
+
+def test_only_english_candidates_give_nothing():
+    web = FakeWeb({'/3/movie/1440098/videos': {'results': [video('lc7LU9fhgG0')]}}, {'lc7LU9fhgG0': MARFIL})
+    assert t.spain_trailer('movie', 1440098, 'K', web) is None
+
+
+def test_subtitled_name_in_tmdb_is_skipped_without_asking_youtube():
+    vids = [dict(video('vose', size=2160), name='Tráiler subtitulado'), dict(video('dob'), name='Tráiler doblado')]
+    web = FakeWeb({'/3/movie/7/videos': {'results': vids}}, {'dob': 'Peli | Tráiler oficial'})
+    assert t.spain_trailer('movie', 7, 'K', web) == 'dob'
+    assert not [c for c in web.calls if 'vose' in c]
+
+
+def test_unverifiable_youtube_title_keeps_tmdb_choice():
+    web = FakeWeb({'/3/movie/7/videos': {'results': [video('es1')]}}, {})  # YouTube no contesta
+    assert t.spain_trailer('movie', 7, 'K', web) == 'es1'
+
+
+def test_oembed_url_asks_youtube_for_the_video():
+    q = parse_qs(urlparse(t.oembed_url('abc')).query)
+    assert urlparse(t.oembed_url('abc')).netloc == 'www.youtube.com'
+    assert q['url'] == ['https://www.youtube.com/watch?v=abc'] and q['format'] == ['json']
+
+
+# --- Si TMDb no tiene un tráiler bueno: búsqueda en YouTube y, si tampoco, el teaser de TMDb ---
+
+def yt_answer(*videos):
+    """Respuesta de la búsqueda de YouTube (youtubei/v1/search), con la forma real pero solo lo que se usa."""
+    items = [{'videoRenderer': {'videoId': key, 'title': {'runs': [{'text': title}]},
+                                'ownerText': {'runs': [{'text': channel}]}, 'lengthText': {'simpleText': length}}}
+             for key, title, channel, length in videos]
+    items.insert(1, {'adSlotRenderer': {'title': 'anuncio'}})
+    return {'contents': {'twoColumnSearchResultsRenderer': {'primaryContents': {'sectionListRenderer': {
+        'contents': [{'itemSectionRenderer': {'contents': items}}]}}}}}
+
+
+class FakePost:
+    def __init__(self, answer):
+        self.answer, self.calls = answer, []
+
+    def __call__(self, url, payload):
+        self.calls.append((url, payload))
+        if self.answer is None:
+            raise IOError('sin red')
+        return self.answer
+
+
+# Lo que contesta YouTube a "Enfrentados: Marfil 2026 tráiler español" (17/11/2026, resumido).
+MARFIL_SEARCH = [
+    ('MXslFvkKD2s', 'ENFRENTADOS MARFIL Tráiler Oficial Español (2026)', 'Trailers In Spanish', '1:29'),
+    ('sm3ADCASJwM', 'Enfrentados: Marfil Trailer | Prime Video', 'Amazon Prime Video España', '1:09'),
+    ('djLAS5I0fqQ', 'Enfrentados: Marfil - Tráiler Oficial | Prime Video', 'Prime Video México', '1:10'),
+    ('zXFHgkIINQw', 'ENFRENTADOS 2006 Trailer Español HD', 'TOP 5 FILMS', '1:53'),
+]
+MARFIL_TEASER = 'Teaser de Enfrentados: Marfil | Prime Video España'
+
+
+def found(title, channel='Canal', length='1:30'):
+    return {'key': 'k', 'title': title, 'channel': channel, 'seconds': t.seconds(length)}
+
+
+def test_seconds_from_youtube_length():
+    assert t.seconds('1:09') == 69
+    assert t.seconds('1:02:03') == 3723
+    assert t.seconds(None) is None
+    assert t.seconds('EN DIRECTO') is None
+
+
+def test_search_results_reads_the_videos_in_order():
+    assert t.search_results(yt_answer(*MARFIL_SEARCH[:2])) == [
+        {'key': 'MXslFvkKD2s', 'title': 'ENFRENTADOS MARFIL Tráiler Oficial Español (2026)',
+         'channel': 'Trailers In Spanish', 'seconds': 89},
+        {'key': 'sm3ADCASJwM', 'title': 'Enfrentados: Marfil Trailer | Prime Video',
+         'channel': 'Amazon Prime Video España', 'seconds': 69}]
+    assert t.search_results({}) == [] and t.search_results(None) == []
+
+
+def test_search_result_must_be_this_film_dubbed_in_spain():
+    def ok(video):
+        return t.good_search_result(video, 'movie', 'Enfrentados: Marfil', '2026')
+    assert ok(found('Enfrentados: Marfil Trailer | Prime Video', 'Amazon Prime Video España'))
+    assert ok(found('ENFRENTADOS MARFIL Tráiler Oficial Español (2026)', 'Trailers In Spanish'))
+    assert ok(found('📺 ENFRENTADOS: MARFIL | TRAILER ESPAÑOL | 9 Septiembre/26 - AMAZON PRIME', 'Trailer Ñ'))
+    assert ok(found('Enfrentados: Marfil | Téaser en español (2025)'))  # el año de antes del estreno vale
+    assert not ok(found('ENFRENTADOS 2006 Trailer Español HD'))  # otra película
+    assert not ok(found('Enfrentados: Marfil Tráiler Español (2019)'))  # otro año
+    assert not ok(found('ENFRENTADOS MARFIL Tráiler Español Latino (2026)'))  # doblaje latino
+    assert not ok(found('Enfrentados: Marfil - Tráiler Oficial | Prime Video', 'Prime Video México'))
+    assert not ok(found('Enfrentados: Marfil | Official Trailer', 'Prime Video España'))  # en inglés
+    assert not ok(found('Enfrentados: Marfil Tráiler (2026) SUBTITULADO'))
+    assert not ok(found('Enfrentados: Marfil (2026) Película completa en español', length='1:35:10'))
+    assert not ok(found('Enfrentados: Marfil Tráiler Español', length=None))  # en directo o sin duración
+    assert not ok(found('Enfrentados: Marfil | Reacción en español'))  # no es un tráiler
+    assert not ok(found('Enfrentados: Marfil Trailer', 'Movie Clips'))  # nada dice que sea en español
+
+
+def test_search_result_words_of_the_title_itself_do_not_count():
+    assert t.good_search_result(found('1917 - Tráiler español'), 'movie', '1917', '2019')
+    assert t.good_search_result(found('Narcos: México | Tráiler en español', 'Netflix España'), 'tv',
+                                'Narcos: México', '2018')
+
+
+def test_search_result_of_a_different_work_with_a_similar_title_is_rejected():
+    # Visto con datos reales: el programa coreano "Running Man" y la serie "Bob Esponja" cogían tráileres de películas.
+    assert not t.good_search_result(found('The Running Man I Tráiler Oficial I Paramount Pictures Spain',
+                                          'Paramount Pictures Spain'), 'tv', 'Running Man', '2010')
+    assert not t.good_search_result(found('BOB ESPONJA: UN HÉROE FUERA DEL AGUA | Teaser Tráiler Oficial | ESPAÑA',
+                                          'Paramount'), 'tv', 'Bob Esponja', '1999')
+    assert not t.good_search_result(found('Enfrentados: Marfil Trailer | Prime Video', 'Amazon Prime Video España'),
+                                    'movie', 'Enfrentados', '2026')
+
+
+def test_series_trailers_may_carry_any_season_year():
+    season = found('Tulsa King | Tráiler Temporada 4 (TRÁILER EN ESPAÑOL) | Estreno: 22/10/2026 Skyshowtime',
+                   'TopSeriesyPelículas')
+    assert t.good_search_result(season, 'tv', 'Tulsa King', '2022')
+    assert not t.good_search_result(found('Tulsa King Tráiler Oficial | Paramount+', 'Paramount+ México'),
+                                    'tv', 'Tulsa King', '2022')
+
+
+def test_youtube_trailer_prefers_spanish_channels():
+    post = FakePost(yt_answer(*MARFIL_SEARCH))
+    assert t.youtube_trailer('movie', 'Enfrentados: Marfil', '2026', post) == 'sm3ADCASJwM'
+    url, payload = post.calls[0]
+    assert urlparse(url).netloc == 'www.youtube.com' and urlparse(url).path == '/youtubei/v1/search'
+    assert payload['query'] == 'Enfrentados: Marfil 2026 tráiler español'
+    assert payload['context']['client']['hl'] == 'es' and payload['context']['client']['gl'] == 'ES'
+
+
+def test_youtube_trailer_search_for_series_has_no_year():
+    post = FakePost(yt_answer())
+    assert t.youtube_trailer('tv', 'Tulsa King', '2022', post) is None
+    assert post.calls[0][1]['query'] == 'Tulsa King serie tráiler español'
+
+
+def test_youtube_trailer_gives_nothing_without_a_good_result_or_an_answer():
+    other_film = yt_answer(('x', 'MI MEJOR ENEMIGA (2026) - Tráiler oficial español', 'AV FILMS', '2:24'))
+    assert t.youtube_trailer('movie', 'Mi mejor amiga', '2026', FakePost(other_film)) is None
+    assert t.youtube_trailer('movie', 'Mi mejor amiga', '2026', FakePost(None)) is None
+
+
+def marfil_web(vids):
+    return FakeWeb({'/3/movie/1440098/videos': {'results': vids},
+                    '/3/movie/1440098': {'title': 'Enfrentados: Marfil', 'release_date': '2026-09-09'}},
+                   {'lc7LU9fhgG0': MARFIL, 'tGWJVIXNcNI': MARFIL_TEASER})
+
+
+def test_find_trailer_searches_youtube_when_tmdb_has_no_good_trailer():
+    web = marfil_web([video('lc7LU9fhgG0'), video('tGWJVIXNcNI', vtype='Teaser')])
+    assert t.find_trailer('movie', 1440098, 'K', web, FakePost(yt_answer(*MARFIL_SEARCH))) == 'sm3ADCASJwM'
+    details = [urlparse(c) for c in web.calls if urlparse(c).path == '/3/movie/1440098'][0]
+    assert parse_qs(details.query)['language'] == ['es-ES']
+
+
+def test_find_trailer_falls_back_to_tmdb_spanish_teaser():
+    web = marfil_web([video('lc7LU9fhgG0'), video('tGWJVIXNcNI', vtype='Teaser'),
+                      video('mx', vtype='Teaser', country='MX')])
+    assert t.find_trailer('movie', 1440098, 'K', web, FakePost(yt_answer())) == 'tGWJVIXNcNI'
+    assert t.find_trailer('movie', 1440098, 'K', web, FakePost(None)) == 'tGWJVIXNcNI'
+
+
+def test_find_trailer_does_not_search_when_tmdb_has_a_good_trailer():
+    web = FakeWeb({'/3/movie/7/videos': {'results': [video('es1')]}}, {'es1': 'Peli | Tráiler oficial'})
+    post = FakePost(yt_answer(*MARFIL_SEARCH))
+    assert t.find_trailer('movie', 7, 'K', web, post) == 'es1'
+    assert post.calls == []
+
+
+def test_find_trailer_for_series_uses_name_and_first_air_date():
+    web = FakeWeb({'/3/tv/9/videos': {'results': []}, '/3/tv/9': {'name': 'Tulsa King', 'first_air_date': '2022-11-13'}},
+                  {})
+    post = FakePost(yt_answer(('tk', 'Tulsa King | Tráiler Temporada 4 (TRÁILER EN ESPAÑOL)', 'TopSeriesyPelículas',
+                               '1:49')))
+    assert t.find_trailer('tv', 9, 'K', web, post) == 'tk'
+
+
+def test_find_trailer_without_title_does_not_search():
+    web = FakeWeb({'/3/movie/7/videos': {'results': []}}, {})  # TMDb no da los datos de la película
+    post = FakePost(yt_answer(*MARFIL_SEARCH))
+    assert t.find_trailer('movie', 7, 'K', web, post) is None
+    assert post.calls == []

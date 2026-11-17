@@ -21,6 +21,7 @@ PRESET = PROFILE + 'preset/'
 RUTAS = PROFILE + 'rutas.json'
 PENDING = PROFILE + 'pendiente'
 BACKUP = PROFILE + 'backup/'
+MENU_VERSION_FILE = PROFILE + 'menu_version'
 INFORME = 'informe-kodi.txt'
 NODES = 'special://profile/addon_data/script.skinvariables/nodes/%s/' % SKIN
 NONE_LABEL = '— No está / saltar —'
@@ -154,6 +155,29 @@ def ask_keys():
             set_setting(sid, value.strip())
 
 
+# - Idioma: YouTube elige la pista de audio según el suyo (en-US de fábrica) y muchos tráileres españoles traen
+#   además el doblaje automático al inglés; sonaba ese. 'es' es el "hl" de YouTube para el español de España.
+# - Redirección: pasando el vídeo por su servidor interno, al parar un tráiler Kodi esperaba 20 s a que terminara
+#   una descarga y el siguiente no arrancaba. Redirigido, Kodi lo descarga directamente de Google.
+YOUTUBE_SETTINGS = (('youtube.language', 'es', lambda v: v[:2] == 'es'),
+                    ('youtube.region', 'ES', lambda v: v == 'ES'),
+                    ('youtube.http.stream_redirect', 'true', lambda v: v == 'true'))
+
+
+def apply_youtube_settings():
+    if not has_addon(YOUTUBE):
+        return False
+    youtube = xbmcaddon.Addon(YOUTUBE)
+    changed = False
+    for sid, value, ok in YOUTUBE_SETTINGS:
+        if not ok(youtube.getSetting(sid)):
+            youtube.setSetting(sid, value)
+            changed = True
+    if changed:
+        log('YouTube: español de España y vídeo directo de Google')
+    return changed
+
+
 def apply_tmdbhelper():
     if not has_addon(TMDBH):
         return False
@@ -207,11 +231,23 @@ def run_discovery():
     if bg:
         rutas['blackghost'] = bg
     write_file(RUTAS, json.dumps(rutas, indent=2, ensure_ascii=False))
+    _write_preset(rutas)
+    return rutas
+
+
+def _write_preset(rutas):
     if xbmcvfs.exists(PRESET):
         for name in xbmcvfs.listdir(PRESET)[1]:
             xbmcvfs.delete(PRESET + name)
     menus.write_preset(menus.build_preset(rutas), PRESET, write_file)
-    return rutas
+
+
+def refresh_menu_if_outdated():
+    """Si el menú lo montó una versión con otro formato, se deja pendiente para que el servicio lo rehaga."""
+    if not load_rutas() or read_file(MENU_VERSION_FILE).strip() == str(menus.MENU_VERSION):
+        return False
+    set_pending(True)
+    return True
 
 
 # AF3 pone ReloadDone al acabar su rutina de arranque (shortcuts/skinvariables-startup.json).
@@ -252,12 +288,17 @@ def apply_skin_config():
     """Aplica el preset. Devuelve False si skinvariables no llegó a copiar el menú."""
     now = time.strftime('%Y-%m-%d_%H:%M:%S')
     first_run = not xbmc.getCondVisibility('Skin.HasSetting(DefaultConfig.InitDone)')
+    rutas = load_rutas()
+    if rutas:  # se rehace con el formato de esta versión; sin rutas guardadas no se toca el que haya
+        _write_preset(rutas)
     copied = True
-    for builtin in menus.skin_builtins(load_rutas(), PRESET, now, first_run):
+    for builtin in menus.skin_builtins(rutas, PRESET, now, first_run):
         xbmc.executebuiltin(builtin, True)
         if 'copy_menufolder' in builtin:
             copied = _wait_for_copy()
     xbmc.executebuiltin('Dialog.Close(1130,true)')
+    if copied and rutas:
+        write_file(MENU_VERSION_FILE, str(menus.MENU_VERSION))
     return copied
 
 

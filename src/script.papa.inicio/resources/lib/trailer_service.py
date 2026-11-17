@@ -19,7 +19,7 @@ MAX_STALLS = 3      # atascos seguidos: YouTube no funciona, se descansa un rato
 PAUSE = 30 * 60.0   # la caja casi nunca se reinicia: la pausa no puede ser hasta el siguiente arranque
 GOOD_AFTER = 15.0   # segundos sin fallos para dar YouTube por bueno otra vez
 ERROR_WINDOW = 5.0  # si YouTube no pudo abrir nuestro tráiler, el "Error de reproducción" de Kodi sale enseguida
-DIM_AFTER = 1.5     # segundos de tráiler antes de atenuar las filas de carátulas
+DIM_AFTER = 3.0     # segundos de tráiler antes de quitar las carátulas: que arranque primero, sin prisas
 
 
 def count_download_failures(text):

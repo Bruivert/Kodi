@@ -28,7 +28,7 @@
         </assets>
     </extension>
 </addon>
-<addon id="script.papa.inicio" name="Kodi de Papá — Asistente" version="1.0.4" provider-name="Bruivert">
+<addon id="script.papa.inicio" name="Kodi de Papá — Asistente" version="1.0.8" provider-name="Bruivert">
     <requires>
         <import addon="xbmc.python" version="3.0.1"/>
         <import addon="script.module.requests" version="2.22.0"/>
