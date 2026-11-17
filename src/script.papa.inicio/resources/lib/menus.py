@@ -4,6 +4,7 @@
 import json
 
 from resources.lib.discover import DEPORTES, needs_trakt
+from resources.lib.filas import FILAS_DEPORTES, fila_url
 
 SKIN = 'skin.arctic.fuse.3'
 FILE = 'skinvariables-shortcut-%s.json'
@@ -14,7 +15,9 @@ FAVOURITES = 'plugin://script.papa.inicio/?lista=favoritos'
 # 4: Deportes con las agendas reales de BlackGhost (no tiene carpetas por deporte).
 # 5: "Mis favoritos" primera fila de Inicio y con fanart (plugin.py); Deportes con 5 filas.
 # 6: Inicio · Películas · Series · Favoritos · Deportes (sin Novedades); Estrenos otra vez primera fila de Inicio.
-MENU_VERSION = 6
+# 7: filas de Palantir servidas desde la copia del asistente (filas.py).
+# 8: también las filas de Deportes desde la copia (cada 15 min).
+MENU_VERSION = 8
 # Kodi recarga las filas "sin orden" cada vez que empieza o acaba cualquier reproducción (para actualizar lo
 # visto). Con las de Palantir eso ocupaba Python 15 s tras cada tráiler y el siguiente esperaba. Con un orden fijo
 # no las recarga; "track" no cambia nada en películas y series (todas valen 0) y se respeta el orden de Palantir.
@@ -23,9 +26,7 @@ ROW_SORT = 'track'
 # Filas de Deportes bajo la agenda: lo de España primero y luego los deportes que nombró tu padre (BlackGhost no
 # tiene pádel; F1 y MotoGP van juntos en "Motor").
 ORDEN_DEPORTES = ['espana', 'futbol', 'baloncesto', 'nfl', 'motor', 'f1', 'ufc', 'canales']
-# Las que además son fila. Cada fila de BlackGhost tarda 3-7 s y Kodi las pide de pocas en pocas, en una sola cola
-# para todas las secciones: con las 9, Favoritos esperaba medio minuto. Los botones bajo el menú llevan a todas.
-FILAS_DEPORTES = ['agenda', 'espana', 'futbol', 'motor', 'canales']
+# Solo las de filas.FILAS_DEPORTES son fila (desde la copia); los botones bajo el menú llevan a todas, directos.
 
 ICONOS_DEPORTES = {
     'agenda': 'calendar-day', 'espana': 'flag', 'futbol': 'futbol', 'baloncesto': 'basketball',
@@ -97,15 +98,18 @@ def _first(group, *keys):
     return None
 
 
-def _usable(group):
-    # Las rutas guardadas por versiones anteriores pueden traer listas de Palantir que ahora piden Trakt.
-    return {key: item for key, item in (group or {}).items() if not needs_trakt(item.get('label'))}
+def _usable(group, name):
+    # Las rutas guardadas por versiones anteriores pueden traer listas de Palantir que ahora piden Trakt. Las demás se
+    # sirven desde la copia del asistente (filas.py): AF3 las vuelve a pedir cada vez que se entra en una sección.
+    return {key: dict(item, path=fila_url('%s.%s' % (name, key))) for key, item in (group or {}).items()
+            if not needs_trakt(item.get('label'))}
 
 
 def _parts(rutas):
     pal = rutas.get('palantir') or {}
     bg = rutas.get('blackghost') or {}
-    return _usable(pal.get('peliculas')), _usable(pal.get('series')), bg.get('agenda'), bg.get('deportes') or {}
+    return (_usable(pal.get('peliculas'), 'peliculas'), _usable(pal.get('series'), 'series'), bg.get('agenda'),
+            bg.get('deportes') or {})
 
 
 def _sections(rutas):
@@ -137,8 +141,12 @@ def _sections(rutas):
     return {'1101': pel_rows, '1102': ser_rows, '1103': nov_rows, '1104': dep_rows}
 
 
-def _is_row(win, label):
-    return win != '1104' or label in [DEPORTES[k]['label'] for k in FILAS_DEPORTES]
+def _row_path(win, label, path):
+    """Ruta de la fila, o None si no es fila. Las de Deportes se sirven desde la copia (filas.py)."""
+    if win != '1104':
+        return path
+    keys = [k for k in FILAS_DEPORTES if DEPORTES[k]['label'] == label]
+    return fila_url('deportes.' + keys[0]) if keys else None
 
 
 def build_preset(rutas):
@@ -151,8 +159,8 @@ def build_preset(rutas):
         for win, slot, label, ico in HUBS
     ]
     for win, rows in sections.items():
-        files[FILE % ('%swidgets' % win)] = [_row(label, path, style) for label, path, _, style in rows
-                                             if _is_row(win, label)]
+        files[FILE % ('%swidgets' % win)] = [_row(label, _row_path(win, label, path), style)
+                                             for label, path, _, style in rows if _row_path(win, label, path)]
         # Botones bajo el menú solo donde ahorran camino (Deportes); en el resto repetirían las filas.
         submenu = rows if win in SUBMENU else []
         files[FILE % ('%ssubmenu' % win)] = [_link(label, path, ico) for label, path, ico, _ in submenu]
@@ -166,9 +174,9 @@ def build_preset(rutas):
     serie_nueva = _first(ser, 'novedades', 'emision')
     if serie_nueva:
         home.append(_row('Series nuevas', serie_nueva['path'], 'Poster'))
-    deportes_hoy = agenda or next((dep[k] for k in ORDEN_DEPORTES if k in dep), None)
-    if deportes_hoy:
-        home.append(_row('Deportes hoy', deportes_hoy['path']))
+    hoy = 'agenda' if agenda else next((k for k in ORDEN_DEPORTES if k in dep), None)
+    if hoy:
+        home.append(_row('Deportes hoy', fila_url('deportes.' + hoy) if hoy in FILAS_DEPORTES else dep[hoy]['path']))
     home.append(_row('Mis favoritos', FAVOURITES, 'Poster'))
     files[FILE % 'homewidgets'] = home
     files[FILE % 'homesubmenu'] = []
@@ -212,7 +220,7 @@ def skin_builtins(rutas, preset_folder, now, first_run=False):
     out += _spotlight('1102', *_named(ser, ('populares', 'Populares'), ('nuevas', 'Nuevas series'),
                                       ('novedades', 'Nuevos episodios'), ('emision', 'En emisión')))
     out += _spotlight('1103', _first(pel, 'estrenos') or _first(ser, 'novedades', 'emision'), 'Novedades')
-    out += _spotlight('1104', agenda, 'Agenda de hoy')
+    out += _spotlight('1104', {'path': fila_url('deportes.agenda')} if agenda else None, 'Agenda de hoy')
     out += _spotlight('1109', None, '')
     # Interruptores con SetBool(…,false): Skin.Reset(x) se queda en el texto x si existe y no apaga el interruptor.
     out += ['Skin.SetString(CustomRating.Movies.Item01,IMDb)',

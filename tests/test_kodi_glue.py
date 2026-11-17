@@ -466,3 +466,25 @@ def test_tmdbhelper_gets_the_clean_omdb_key(monkeypatch):
     monkeypatch.setattr(ks, 'setting', lambda sid: 'http://www.omdbapi.com/? i=tt3896198&apikey=f525ce5d')
     assert ks.apply_tmdbhelper()
     assert saved['omdb_apikey'] == 'f525ce5d'
+
+
+# --- Copias de las filas de Palantir (filas.py) ---
+
+def test_saved_row_is_read_back_and_listed_in_the_index(monkeypatch):
+    written, _ = fake_menu_files(monkeypatch, {})
+    assert ks.load_fila('peliculas.estrenos') is None and ks.load_fila_index() == {}
+    entry = {'path': 'plugin://p/?e', 'time': 100.0, 'items': [{'label': 'A'}]}
+    ks.save_fila('peliculas.estrenos', entry)
+    assert ks.load_fila('peliculas.estrenos') == entry
+    assert ks.load_fila_index() == {'peliculas.estrenos': {'path': 'plugin://p/?e', 'time': 100.0}}
+    ks.save_fila('series.nuevas', dict(entry, path='plugin://p/?n'))
+    assert set(ks.load_fila_index()) == {'peliculas.estrenos', 'series.nuevas'}
+
+
+def test_row_is_fetched_with_every_field_the_skin_shows(monkeypatch):
+    from resources.lib import filas
+    asked = []
+    monkeypatch.setattr(ks, 'rpc', lambda method, params=None: asked.append((method, params)) or {'files': [{'a': 1}]})
+    assert ks.fetch_row('plugin://p/?e') == [{'a': 1}]
+    assert asked == [('Files.GetDirectory', {'directory': 'plugin://p/?e', 'media': 'video',
+                                             'properties': filas.FIELDS})]

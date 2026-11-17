@@ -10,6 +10,11 @@ PAL = 'plugin://plugin.video.palantir3/'
 BG = 'plugin://plugin.video.blackghost/'
 
 
+def fila(key):
+    # Las filas de Palantir se sirven desde la copia del asistente (resources/lib/filas.py).
+    return 'plugin://script.papa.inicio/?fila=' + key
+
+
 def it(label, path):
     return {'label': label, 'path': path}
 
@@ -96,8 +101,8 @@ def test_sports_rows_are_few_and_buttons_reach_every_sport():
 def test_movies_rows_are_posters_from_palantir():
     rows = m.build_preset(RUTAS)[f('1101widgets')]
     assert [(r['label'], r['path']) for r in rows] == [
-        ('Estrenos', PAL + 'p_new'), ('Populares', PAL + 'p_pop'), ('Mejor valoradas', PAL + 'p_top'),
-        ('Géneros', PAL + 'p_gen')]
+        ('Estrenos', fila('peliculas.estrenos')), ('Populares', fila('peliculas.populares')),
+        ('Mejor valoradas', fila('peliculas.valoradas')), ('Géneros', fila('peliculas.generos'))]
     assert all(r['widget_style'] == 'Poster' and r['target'] == 'videos' for r in rows[:3])
     assert 'widget_style' not in rows[3]
 
@@ -113,7 +118,7 @@ def test_series_generos_row_last_only_when_palantir_has_it():
     rutas = json.loads(json.dumps(RUTAS))
     rutas['palantir']['series']['generos'] = it('Géneros', PAL + 's_gen')
     rows = m.build_preset(rutas)[f('1102widgets')]
-    assert (rows[-1]['label'], rows[-1]['path']) == ('Géneros', PAL + 's_gen')
+    assert (rows[-1]['label'], rows[-1]['path']) == ('Géneros', fila('series.generos'))
     assert 'Géneros' not in [r['label'] for r in m.build_preset(RUTAS)[f('1102widgets')]]
 
 
@@ -178,8 +183,8 @@ def test_builtins_finish_af3_first_run_only_when_it_did_not():
 
 def test_builtins_spotlight_uses_palantir_and_resets_missing():
     b = m.skin_builtins(RUTAS, 'x/', 'now')
-    assert 'Skin.SetString(HomeSwitcher.Home.Spotlight.Path,"%sp_new")' % PAL in b
-    assert 'Skin.SetString(HomeSwitcher.1104.Spotlight.Path,"%sagenda")' % BG in b
+    assert 'Skin.SetString(HomeSwitcher.Home.Spotlight.Path,"%s")' % fila('peliculas.estrenos') in b
+    assert 'Skin.SetString(HomeSwitcher.1104.Spotlight.Path,"%s")' % fila('deportes.agenda') in b
     b2 = m.skin_builtins({}, 'x/', 'now')
     assert 'Skin.Reset(HomeSwitcher.Home.Spotlight.Path)' in b2
     assert not any(s.startswith('Skin.SetString(HomeSwitcher.Home.Spotlight.Path') for s in b2)
@@ -221,17 +226,19 @@ RUTAS_SIN_TRAKT = {'palantir': {
 def test_rows_use_recently_added_movies_and_new_series():
     files = m.build_preset(RUTAS_SIN_TRAKT)
     assert [(r['label'], r['path']) for r in files[f('1101widgets')]] == [
-        ('Estrenos', PAL + 'p_new'), ('Recién añadidas', PAL + 'p_add'), ('Géneros', PAL + 'p_gen')]
+        ('Estrenos', fila('peliculas.estrenos')), ('Recién añadidas', fila('peliculas.recientes')),
+        ('Géneros', fila('peliculas.generos'))]
     assert [(r['label'], r['path']) for r in files[f('1102widgets')]] == [
-        ('Nuevos episodios', PAL + 's_upd'), ('Nuevas series', PAL + 's_new'), ('Géneros', PAL + 's_gen')]
+        ('Nuevos episodios', fila('series.novedades')), ('Nuevas series', fila('series.nuevas')),
+        ('Géneros', fila('series.generos'))]
     assert all(r['widget_style'] == 'Poster' for r in files[f('1101widgets')][:2] + files[f('1102widgets')][:2])
 
 
 def test_spotlights_name_the_list_they_show():
     b = m.skin_builtins(RUTAS_SIN_TRAKT, 'x/', 'now')
-    assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Path,"%sp_add")' % PAL in b
+    assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Path,"%s")' % fila('peliculas.recientes') in b
     assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Label,Recién añadidas)' in b
-    assert 'Skin.SetString(HomeSwitcher.1102.Spotlight.Path,"%ss_new")' % PAL in b
+    assert 'Skin.SetString(HomeSwitcher.1102.Spotlight.Path,"%s")' % fila('series.nuevas') in b
     assert 'Skin.SetString(HomeSwitcher.1102.Spotlight.Label,Nuevas series)' in b
     assert 'Skin.SetString(HomeSwitcher.Home.Spotlight.Label,Estrenos)' in b
 
@@ -243,9 +250,9 @@ def test_saved_trakt_only_lists_are_left_out():
     rutas['palantir']['series']['populares'] = it('Más vistas', PAL + 's_most')
     files = m.build_preset(rutas)
     paths = [r['path'] for name, rows in files.items() for r in rows]
-    assert PAL + 'p_most' not in paths and PAL + 's_most' not in paths
+    assert fila('peliculas.populares') not in paths and fila('series.populares') not in paths
     b = m.skin_builtins(rutas, 'x/', 'now')
-    assert not [x for x in b if 'p_most' in x or 's_most' in x]
+    assert not [x for x in b if 'populares' in x]
     assert 'Skin.SetString(HomeSwitcher.1101.Spotlight.Label,Estrenos)' in b
 
 
@@ -254,3 +261,23 @@ def test_menu_keeps_the_search_icon():
     b = m.skin_builtins(RUTAS, 'x/', 'now')
     assert 'Skin.SetBool(HomeSwitcher.DisableSearch,false)' in b
     assert 'Skin.SetBool(HomeSwitcher.LoopBack,false)' in b
+
+
+def test_palantir_rows_and_spotlights_never_call_palantir_directly():
+    # AF3 vuelve a pedir todas las filas cada vez que se entra en una sección: con Palantir directo, ~6 s cada una.
+    files = m.build_preset(RUTAS_SIN_TRAKT)
+    paths = [r['path'] for rows in files.values() for r in rows if r.get('path')]
+    assert paths and not [p for p in paths if p.startswith(PAL)]
+    assert not [x for x in m.skin_builtins(RUTAS_SIN_TRAKT, 'x/', 'now') if PAL in x]
+
+
+def test_sports_rows_and_spotlight_come_from_the_copy_but_buttons_open_blackghost():
+    files = m.build_preset(RUTAS)
+    rows = files[f('1104widgets')]
+    assert rows and all(r['path'].startswith('plugin://script.papa.inicio/?fila=deportes.') for r in rows)
+    assert [w['path'] for w in files[f('homewidgets')] if w['label'] == 'Deportes hoy'] == [fila('deportes.agenda')]
+    assert 'Skin.SetString(HomeSwitcher.1104.Spotlight.Path,"%s")' % fila('deportes.agenda') in m.skin_builtins(
+        RUTAS, 'x/', 'now')
+    # Los botones no cargan nada hasta pulsarlos: van directos a BlackGhost, también los que no son fila.
+    sub = files[f('1104submenu')]
+    assert all(s['path'].startswith(BG) for s in sub)

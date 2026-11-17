@@ -9,7 +9,7 @@ import xbmcgui
 import xbmcvfs
 
 from resources.lib import kodi_setup as ks
-from resources.lib import patches, trailers
+from resources.lib import filas, patches, trailers
 from resources.lib.trailer_service import LogWatch, TrailerAutoplay
 
 
@@ -162,6 +162,10 @@ def main():
                                close_error=lambda: xbmc.executebuiltin('Dialog.Close(okdialog)'), dim=dim_rows)
     # Tras actualizarse YouTube o la skin (también con Kodi encendido) se vuelven a aplicar los arreglos.
     keeper = patches.PatchKeeper(ks.apply_patches, xbmc.getCondVisibility, reload_skin, time.time, ks.SKIN)
+    # Copias de las filas de Palantir: se renuevan de una en una cuando nadie usa el mando ni ve una película.
+    refresher = filas.Refresher(lambda: filas.row_paths(ks.load_rutas()), ks.load_fila_index, ks.fetch_row,
+                                ks.save_fila, lambda: xbmc.getCondVisibility(
+                                    'System.IdleTime(20) + !Window.IsActive(fullscreenvideo)'), time.time)
     last_check = 0.0
     fallos = 0  # cada intento recarga la skin: no insistir sin fin
     while not monitor.abortRequested():
@@ -183,6 +187,12 @@ def main():
             keeper.tick()
         except Exception as exc:
             ks.log('arreglos: %s' % exc)
+        try:
+            renewed = refresher.tick()
+            if renewed:
+                ks.log('fila %s pedida a Palantir' % renewed)
+        except Exception as exc:
+            ks.log('filas: %s' % exc)
         try:
             autoplay.tick()
         except Exception as exc:  # un fallo de red o de un tráiler no debe tumbar el servicio

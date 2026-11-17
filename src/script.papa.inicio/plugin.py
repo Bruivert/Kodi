@@ -3,9 +3,11 @@
 
 plugin://script.papa.inicio/?lista=favoritos  los favoritos de Kodi con su fanart y ficha de TMDb
 plugin://script.papa.inicio/?run=<orden>      ejecuta la orden de un favorito que no es carpeta ni vídeo
+plugin://script.papa.inicio/?fila=<lista>     una fila de Palantir desde su copia (filas.py)
 """
 import json
 import sys
+import time
 from urllib.parse import parse_qs, urlencode
 from urllib.request import Request, urlopen
 
@@ -14,6 +16,7 @@ import xbmcgui
 import xbmcplugin
 
 from resources.lib import favoritos as fv
+from resources.lib import filas
 from resources.lib import kodi_setup as ks
 
 FAVOURITES = 'special://profile/favourites.xml'
@@ -71,6 +74,57 @@ def listar_favoritos(handle):
     xbmcplugin.endOfDirectory(handle, cacheToDisc=False)
 
 
+# Clave de filas.to_item()['info'] → método de InfoTagVideo (setInfo está obsoleto en Kodi 21).
+SETTERS = {'title': ('setTitle', str), 'year': ('setYear', int), 'plot': ('setPlot', str),
+           'rating': ('setRating', float), 'votes': ('setVotes', int), 'genre': ('setGenres', list),
+           'duration': ('setDuration', int), 'mpaa': ('setMpaa', str), 'premiered': ('setPremiered', str),
+           'studio': ('setStudios', list), 'country': ('setCountries', list), 'tagline': ('setTagLine', str),
+           'originaltitle': ('setOriginalTitle', str), 'imdbnumber': ('setIMDBNumber', str),
+           'tvshowtitle': ('setTvShowTitle', str), 'season': ('setSeason', int), 'episode': ('setEpisode', int),
+           'trailer': ('setTrailer', str), 'director': ('setDirectors', list), 'mediatype': ('setMediaType', str)}
+
+
+def _as(kind, value):
+    if kind is list:
+        return list(value) if isinstance(value, (list, tuple)) else [str(value)]
+    try:
+        return kind(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fila_item(item):
+    li = xbmcgui.ListItem(item['label'], offscreen=True)
+    li.setArt(item['art'])
+    tag = li.getVideoInfoTag()
+    for key, value in item['info'].items():
+        name, kind = SETTERS.get(key, (None, None))
+        value = _as(kind, value) if name else None
+        if value is not None:
+            getattr(tag, name)(value)
+    if item['uniqueids']:
+        default = 'tmdb' if 'tmdb' in item['uniqueids'] else next(iter(item['uniqueids']))
+        tag.setUniqueIDs(item['uniqueids'], default)
+    for name, value in item['properties'].items():
+        li.setProperty(name, str(value))
+    return li
+
+
+def listar_fila(handle, key):
+    path = filas.row_paths(ks.load_rutas()).get(key)
+    cached = ks.load_fila(key)
+    if path and not filas.usable(cached, path):
+        files = ks.fetch_row(path)  # primera vez (o la lista cambió): se pide ahora y se guarda
+        if files:
+            cached = filas.entry(path, files, time.time())
+            ks.save_fila(key, cached)
+    items = (cached or {}).get('items') or []
+    for item in items:
+        xbmcplugin.addDirectoryItem(handle, item['path'], _fila_item(item), isFolder=item['folder'])
+    xbmcplugin.setContent(handle, filas.content(items))
+    xbmcplugin.endOfDirectory(handle, cacheToDisc=False)
+
+
 def main(argv):
     handle = int(argv[1]) if len(argv) > 1 and argv[1].lstrip('-').isdigit() else -1
     params = {k: v[0] for k, v in parse_qs((argv[2] if len(argv) > 2 else '').lstrip('?')).items()}
@@ -78,6 +132,8 @@ def main(argv):
         xbmc.executebuiltin(params['run'])
     elif params.get('lista') == 'favoritos':
         listar_favoritos(handle)
+    elif params.get('fila'):
+        listar_fila(handle, params['fila'])
     elif handle >= 0:
         xbmcplugin.endOfDirectory(handle, succeeded=False)
 

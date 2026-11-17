@@ -9,7 +9,7 @@ import xbmcaddon
 import xbmcgui
 import xbmcvfs
 
-from resources.lib import diagnostico, discover, menus, patches
+from resources.lib import diagnostico, discover, filas, menus, patches
 
 ADDON_ID = 'script.papa.inicio'
 TITLE = 'Kodi de Papá'
@@ -22,6 +22,8 @@ PRESET = PROFILE + 'preset/'
 RUTAS = PROFILE + 'rutas.json'
 PENDING = PROFILE + 'pendiente'
 BACKUP = PROFILE + 'backup/'
+FILAS = PROFILE + 'filas/'  # copias de las filas de Palantir (filas.py)
+FILAS_INDEX = FILAS + 'indice.json'
 MENU_VERSION_FILE = PROFILE + 'menu_version'
 # Donde BlackGhost guarda el código con el que entra sin preguntarlo (lo lee aunque sea uno temporal, como "n17").
 BG_CODE_FILE = 'special://profile/addon_data/plugin.video.blackghost/codeservernew.txt'
@@ -210,6 +212,34 @@ def load_rutas():
         return json.loads(read_file(RUTAS) or '{}')
     except ValueError:
         return {}
+
+
+def _load_json(path, default):
+    try:
+        return json.loads(read_file(path) or 'null') or default
+    except ValueError:
+        return default
+
+
+def load_fila(key):
+    return _load_json(FILAS + key + '.json', None)
+
+
+def load_fila_index():
+    """{fila: {'path', 'time'}} sin leer las copias enteras."""
+    return _load_json(FILAS_INDEX, {})
+
+
+def save_fila(key, entry):
+    write_file(FILAS + key + '.json', json.dumps(entry, ensure_ascii=False))
+    index = load_fila_index()
+    index[key] = {'path': entry['path'], 'time': entry['time']}
+    write_file(FILAS_INDEX, json.dumps(index, ensure_ascii=False))
+
+
+def fetch_row(path):
+    """La lista tal como la da el addon (Palantir), con todos los datos que pinta la skin."""
+    return rpc('Files.GetDirectory', {'directory': path, 'media': 'video', 'properties': filas.FIELDS}).get('files') or []
 
 
 def summary(rutas):

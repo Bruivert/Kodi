@@ -149,3 +149,25 @@ Desarrollo en la rama `claude/brave-keller-iht160`. Pages se publica desde `main
    - Cada deporte abre su carpeta.
    - El arranque se mantiene en un tiempo razonable.
    - Diagnóstico enviado para la fase 2.
+
+
+## Velocidad de las filas (1.0.10, 17/11/2026)
+
+**Medido en la caja:**
+- Arctic Fuse 3 abre cada sección como una ventana. Cada vez que se entra en una, aunque el foco solo pase de largo, vuelve a pedir todas sus filas.
+- Kodi ejecuta los addons de Python de uno en uno: un solo GIL para todos los intérpretes. Con la CPU medio libre, todo espera turno.
+- Una lista de Palantir cuesta unos 6 s (unos 30 s al encender). Al encender se lanzaban 11 Palantir para 6 listas distintas, porque la cabecera de cada sección repite una de sus filas.
+- Llegar a Favoritos costaba 65-81 s, y 20-25 s aunque la caja llevara rato encendida.
+
+**Solución** (la misma idea que AutoWidget: https://github.com/drinfernoo/plugin.program.autowidget/issues/53):
+- Las filas y cabeceras de Palantir y Deportes son `plugin://script.papa.inicio/?fila=<grupo.clave>` (filas.py, plugin.py).
+- Se sirven desde una copia en `addon_data/script.papa.inicio/filas/` hecha con `Files.GetDirectory`. Conserva la ficha, el arte, los ids, la ruta y las propiedades de Palantir (`isplayable`, `p3*`).
+- El servicio (`filas.Refresher`) las renueva de una en una:
+  - 2 min tras arrancar y con 20 s entre una y otra;
+  - solo con `System.IdleTime(20)` y sin vídeo a pantalla completa;
+  - cada hora las de Palantir y cada 15 min las de BlackGhost;
+  - si falla, espera 5 min.
+- Si no hay copia, la primera petición la hace en el momento.
+- Los botones de Deportes siguen yendo directos a BlackGhost.
+
+**Resultado:** Favoritos con la caja en marcha, al instante (unos 0,4 s después de pulsar); recién encendida, unos 17 s.
