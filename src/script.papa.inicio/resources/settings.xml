@@ -4,5 +4,6 @@
         <setting id="trailers_auto" type="bool" label="Tráileres automáticos (en español de España si lo hay)" default="true"/>
         <setting id="tmdb_key" type="text" label="Clave de TMDb v3 (tráileres)" default=""/>
         <setting id="omdb_key" type="text" label="Clave de OMDb (nota de IMDb)" default=""/>
+        <setting id="bg_codigo" type="text" label="Código de BlackGhost (de su Telegram)" default=""/>
     </category>
 </settings>

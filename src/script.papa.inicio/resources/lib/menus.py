@@ -10,18 +10,21 @@ FILE = 'skinvariables-shortcut-%s.json'
 FAVOURITES = 'favourites://'
 # Súbelo cuando cambie el formato del menú: las cajas que ya lo tienen montado lo vuelven a aplicar al arrancar.
 # 3: filas sin las listas de Palantir que piden Trakt ("Más vistas"), con "Recién añadidas" y "Nuevas series".
-MENU_VERSION = 3
+# 4: Deportes con las agendas reales de BlackGhost (no tiene carpetas por deporte).
+MENU_VERSION = 4
 # Kodi recarga las filas "sin orden" cada vez que empieza o acaba cualquier reproducción (para actualizar lo
 # visto). Con las de Palantir eso ocupaba Python 15 s tras cada tráiler y el siguiente esperaba. Con un orden fijo
 # no las recarga; "track" no cambia nada en películas y series (todas valen 0) y se respeta el orden de Palantir.
 ROW_SORT = 'track'
 
-# Orden en el que tu padre nombró los deportes.
-ORDEN_DEPORTES = ['futbol', 'baloncesto', 'nfl', 'padel', 'f1', 'motogp', 'ufc']
+# Filas de Deportes bajo la agenda: lo de España primero y luego los deportes que nombró tu padre (BlackGhost no
+# tiene pádel; F1 y MotoGP van juntos en "Motor").
+ORDEN_DEPORTES = ['espana', 'futbol', 'baloncesto', 'nfl', 'motor', 'f1', 'ufc', 'canales']
 
 ICONOS_DEPORTES = {
-    'agenda': 'calendar-day', 'futbol': 'futbol', 'baloncesto': 'basketball', 'nfl': 'football-american',
-    'padel': 'table-tennis-paddle-ball', 'f1': 'flag-checkered', 'motogp': 'motorcycle', 'ufc': 'hand-fist',
+    'agenda': 'calendar-day', 'espana': 'flag', 'futbol': 'futbol', 'baloncesto': 'basketball',
+    'nfl': 'football-american', 'motor': 'motorcycle', 'f1': 'flag-checkered', 'ufc': 'hand-fist',
+    'canales': 'satellite-dish',
 }
 
 # (ventana, slot, etiqueta, icono). 1106-1108 se dejan como en la skin, desactivadas.

@@ -101,6 +101,17 @@ def http_post(url, payload):
     return http_get(url, payload)
 
 
+class PapaMonitor(xbmc.Monitor):
+    """Avisa cuando cambian los ajustes del asistente (p. ej. un código nuevo de BlackGhost)."""
+
+    def __init__(self):
+        super(PapaMonitor, self).__init__()
+        self.settings_changed = False
+
+    def onSettingsChanged(self):
+        self.settings_changed = True
+
+
 class Resolver(object):
     def __init__(self):
         self.cache = {}
@@ -137,10 +148,11 @@ class Resolver(object):
 
 
 def main():
-    monitor = xbmc.Monitor()
+    monitor = PapaMonitor()
     try:
         ks.apply_youtube_settings()
         ks.refresh_menu_if_outdated()
+        ks.sync_bg_code()
     except Exception as exc:
         ks.log('arreglos: %s' % exc)
     dim_rows(False)
@@ -156,6 +168,12 @@ def main():
         now = time.time()
         if now - last_check > 3:
             last_check = now
+            if monitor.settings_changed:
+                monitor.settings_changed = False
+                try:
+                    ks.sync_bg_code()
+                except Exception as exc:
+                    ks.log('BlackGhost: %s' % exc)
             if fallos < 3 and ks.finish_pending(lambda: monitor.waitForAbort(3)) is False:
                 fallos += 1
                 ks.log('el menú no se copió (intento %d)' % fallos)

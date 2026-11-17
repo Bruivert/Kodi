@@ -40,7 +40,7 @@ def test_addon_xml_declares_script_and_service_for_omega():
 def test_settings_have_keys_and_trailer_switch():
     root = ET.parse(os.path.join(ADDON_DIR, 'resources', 'settings.xml')).getroot()
     ids = {s.get('id') for s in root.iter('setting')}
-    assert {'tmdb_key', 'omdb_key', 'trailers_auto'} <= ids
+    assert {'tmdb_key', 'omdb_key', 'trailers_auto', 'bg_codigo'} <= ids
 
 
 def test_entry_points_compile():
@@ -51,10 +51,10 @@ def test_entry_points_compile():
 def test_summary_counts_rows_and_names_sports():
     rutas = {'palantir': {'peliculas': {'estrenos': {}, 'populares': {}, 'valoradas': {}, 'generos': {}},
                           'series': {'novedades': {}, 'emision': {}}},
-             'blackghost': {'agenda': {'path': 'x'}, 'deportes': {'futbol': {}, 'ufc': {}}}}
+             'blackghost': {'agenda': {'path': 'x'}, 'deportes': {'futbol': {}, 'ufc': {}, 'padel': {}}}}
     text = ks.summary(rutas)
     assert 'Películas: 4 filas' in text and 'Series: 2 filas' in text
-    assert 'Deportes: Agenda de hoy, Fútbol, UFC' in text
+    assert 'Deportes: Agenda de hoy, Fútbol, UFC y boxeo' in text
 
 
 def test_summary_when_addons_missing():
@@ -372,3 +372,66 @@ def test_apply_never_overwrites_the_preset_without_saved_rutas(monkeypatch):
     written, _ = fake_menu_files(monkeypatch, {})
     ks.apply_skin_config()
     assert not [p for p in written if p.startswith(ks.PRESET)]
+
+
+# --- Código de BlackGhost: va dentro de sus rutas y caduca cada cierto tiempo ---
+
+def fake_bg(monkeypatch, files, code):
+    from tests.test_discover import TREE, find_addon
+    written, flags = fake_menu_files(monkeypatch, files)
+    monkeypatch.setattr(ks, 'setting', lambda sid: code if sid == 'bg_codigo' else '')
+    listed = []
+
+    def list_dir(path):
+        listed.append(path)
+        return TREE.get(path, []) if written.get(ks.BG_CODE_FILE, files.get(ks.BG_CODE_FILE)) == 'n17' else []
+    monkeypatch.setattr(ks, 'list_dir', list_dir)
+    monkeypatch.setattr(ks, 'find_addon', find_addon)
+    return written, flags, listed
+
+
+BG_RUTAS = json.dumps({'palantir': {'peliculas': {'estrenos': {'label': 'E', 'path': 'plugin://p/e'}}},
+                       'blackghost': {'id': 'plugin.video.blackghost', 'codigo': 'n16',
+                                      'agenda': {'label': 'Agenda', 'path': 'plugin://bg/?n16'}}})
+
+
+def test_new_blackghost_code_is_saved_for_blackghost_and_the_rows_are_found_again(monkeypatch):
+    written, flags, _ = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS}, 'n17')
+    assert ks.sync_bg_code()
+    assert written[ks.BG_CODE_FILE] == 'n17'  # BlackGhost entra sin preguntarlo
+    bg = json.loads(written[ks.RUTAS])['blackghost']
+    assert bg['codigo'] == 'n17' and bg['agenda']['path'].endswith('?dplus')
+    assert json.loads(written[ks.RUTAS])['palantir'] == json.loads(BG_RUTAS)['palantir']
+    assert flags == [True]  # el servicio rehace el menú
+
+
+def test_same_or_empty_code_changes_nothing(monkeypatch):
+    rutas = BG_RUTAS.replace('"n16"', '"n17"')
+    written, flags, listed = fake_bg(monkeypatch, {ks.RUTAS: rutas, ks.BG_CODE_FILE: 'n17'}, 'n17')
+    assert not ks.sync_bg_code() and written == {} and flags == [] and listed == []
+    written, flags, listed = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS}, '')
+    assert not ks.sync_bg_code() and written == {} and flags == [] and listed == []
+
+
+def test_code_rejected_by_blackghost_keeps_the_old_rows(monkeypatch):
+    written, flags, _ = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS}, 'n99')
+    assert not ks.sync_bg_code()
+    assert written[ks.BG_CODE_FILE] == 'n99'
+    assert ks.RUTAS not in written and flags == []
+
+
+def test_blackghost_is_never_opened_in_the_background_without_a_saved_code(monkeypatch):
+    # Sin código guardado, "INGRESAR AL ADDON" abre un teclado: desde el servicio se quedaría en pantalla.
+    written, flags, listed = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS, ks.MENU_VERSION_FILE: '3'}, '')
+    assert ks.refresh_menu_if_outdated()
+    assert not any('blackghost' in p for p in listed)
+    assert json.loads(written.get(ks.RUTAS, BG_RUTAS))['blackghost'] == json.loads(BG_RUTAS)['blackghost']
+
+
+def test_older_menu_also_finds_the_blackghost_rows_again(monkeypatch):
+    written, flags, _ = fake_bg(monkeypatch, {ks.RUTAS: BG_RUTAS, ks.MENU_VERSION_FILE: '3',
+                                              ks.BG_CODE_FILE: 'n17'}, 'n17')
+    assert ks.refresh_menu_if_outdated()
+    bg = json.loads(written[ks.RUTAS])['blackghost']
+    assert 'canales' in bg['deportes'] and bg['codigo'] == 'n17'
+    assert flags == [True]

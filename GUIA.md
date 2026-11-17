@@ -5,7 +5,7 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 **Inicio · Películas · Series · Novedades · Deportes · Favoritos**
 
 - Películas, Series y Novedades salen de **Palantir** (con tu AllDebrid).
-- Deportes sale de **BlackGhost**: Agenda de hoy, Fútbol, Baloncesto, NFL, Pádel, Fórmula 1, MotoGP y UFC.
+- Deportes sale de **BlackGhost**: Agenda de hoy (en hora de España), Partidos en España (Acestream), Fútbol, Baloncesto, NFL, Motor (F1 y MotoGP), Fórmula 1 en español (repeticiones), UFC y boxeo, y Canales Acestream. BlackGhost no tiene pádel.
 - Nota de **IMDb** en películas y series.
 - **Tráileres automáticos en español de España**: si tu padre se queda unos segundos sobre una película, suena su tráiler de fondo. Si no hay ninguno en castellano, suena el de la web de TMDb en el idioma original (casi siempre inglés), como cuando miras la película en el móvil.
 
@@ -37,7 +37,8 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 5. **Addons → Addons de programas → Kodi de Papá — Asistente → Configurar todo**. El asistente:
    - Pregunta si instalar **Arctic Fuse 3** y **YouTube** → **Sí** a los dos.
    - Pide las claves de **OMDb** y de **TMDb**. Puedes dejarlas vacías y ponerlas después.
-   - Recorre Palantir y BlackGhost. Si **BlackGhost pide el código**, escríbelo. Si no reconoce alguna carpeta, te pregunta cuál es. Si no existe, elige **«— No está / saltar —»**.
+   - Te pide las claves y el **código de BlackGhost** (sale en su Telegram, p. ej. `n17`). El asistente se lo deja guardado a BlackGhost, que ya no lo vuelve a pedir.
+   - Recorre Palantir y BlackGhost. Si no reconoce alguna carpeta, te pregunta cuál es. Si no existe, elige **«— No está / saltar —»**.
    - Te enseña un resumen de lo que ha encontrado.
    - Cambia la skin. Cuando Kodi pregunte **«¿Mantener este cambio?»**, pulsa **Sí**.
    - Espera unos segundos en el Inicio hasta que salga **«Menú de papá listo»**.
@@ -72,6 +73,6 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 | Un tráiler suena en inglés | YouTube añade a muchos tráileres españoles un doblaje automático al inglés y lo elegía porque venía configurado en inglés. El asistente lo pone en español de España (idioma `es`, región `ES`). Además, antes de poner un tráiler mira su título en YouTube y se salta los subtitulados (VOSE) y los que TMDb marca como españoles pero son en inglés. |
 | Una película no tiene tráiler | Si TMDb no tiene un tráiler en español de España, el asistente lo busca en YouTube (título y año de la película + «tráiler español») y solo acepta uno que empiece por el título, diga que es en español o venga de un canal de España, dure menos de 5 minutos y no sea latino ni subtitulado. Si no lo encuentra, pone el teaser en español de TMDb. Y si tampoco hay, el vídeo de TMDb en el idioma original de la película (el tráiler; si no hay, el teaser o un clip), igual que la web de TMDb: así salen, por ejemplo, «Ali G: Kién es yo?» (en inglés) o «El regalo de cumpleaños» (un clip en alemán). Solo se queda sin tráiler lo que TMDb no tiene en ningún idioma. |
 | Palantir pregunta por Trakt.tv o una fila sale vacía | Algunas listas de Palantir («Más vistas», «Recomendadas», «Series en seguimiento») solo funcionan con una cuenta de Trakt.tv. El menú no las usa: Películas lleva **Estrenos**, **Recién añadidas** y **Géneros**, y Series **Nuevos episodios**, **Nuevas series** y **Géneros**. Si aun así sale la pregunta, responde **No** y haz Asistente → **Actualizar menús**. |
-| Deportes vacío o con error | Seguramente ha caducado el código de BlackGhost: ábrelo una vez y pon el nuevo. |
+| Deportes vacío o con error | Seguramente ha caducado el código de BlackGhost (va dentro de las rutas de Deportes). Pon el nuevo en **Asistente → Claves** (o en sus ajustes, «Código de BlackGhost»): el asistente se lo pasa a BlackGhost, vuelve a buscar las filas y rehace el menú solo. |
 | El menú no ha cambiado | Reinicia Kodi. El servicio termina de montarlo al volver al Inicio. |
 | Falta una sección | Asistente → **Actualizar menús**. Si el addon no está instalado, su sección se oculta. |

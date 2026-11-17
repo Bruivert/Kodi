@@ -26,8 +26,10 @@ RUTAS = {
         'id': 'plugin.video.blackghost',
         'agenda': it('Agenda', BG + 'agenda'),
         'deportes': {'futbol': it('Fútbol', BG + 'futbol'), 'nfl': it('NFL', BG + 'nfl'),
-                     'baloncesto': it('NBA', BG + 'nba'), 'padel': it('Pádel', BG + 'padel'),
-                     'f1': it('F1', BG + 'f1'), 'motogp': it('MotoGP', BG + 'motogp'), 'ufc': it('UFC', BG + 'ufc')},
+                     'baloncesto': it('Basketball', BG + 'nba'), 'espana': it('CIRACO', BG + 'ciraco'),
+                     'f1': it('F1 Replays', BG + 'f1'), 'motor': it('Motorsport', BG + 'motor'),
+                     'ufc': it('UFC', BG + 'ufc'), 'canales': it('ACESTREAM MIXTO', BG + 'mixto'),
+                     'padel': it('Pádel', BG + 'padel')},  # "padel" lo guardó una versión antigua: ya no sale
     },
 }
 
@@ -63,8 +65,9 @@ def test_favoritos_hub_shows_kodi_favourites():
 
 def test_sports_rows_follow_dad_order_with_agenda_first():
     rows = m.build_preset(RUTAS)[f('1104widgets')]
-    assert [r['label'] for r in rows] == ['Agenda de hoy', 'Fútbol', 'Baloncesto', 'NFL', 'Pádel',
-                                          'Fórmula 1', 'MotoGP', 'UFC']
+    assert [r['label'] for r in rows] == ['Agenda de hoy', 'Partidos en España', 'Fútbol', 'Baloncesto', 'NFL',
+                                          'Motor: F1 y MotoGP', 'Fórmula 1 en español', 'UFC y boxeo',
+                                          'Canales Acestream']
     sub = m.build_preset(RUTAS)[f('1104submenu')]
     assert [s['path'] for s in sub] == [r['path'] for r in rows]
 
@@ -95,10 +98,10 @@ def test_series_generos_row_last_only_when_palantir_has_it():
 
 def test_missing_sport_has_no_row():
     rutas = json.loads(json.dumps(RUTAS))
-    del rutas['blackghost']['deportes']['padel']
+    del rutas['blackghost']['deportes']['espana']
     del rutas['blackghost']['agenda']
     labels = [r['label'] for r in m.build_preset(rutas)[f('1104widgets')]]
-    assert 'Pádel' not in labels and 'Agenda de hoy' not in labels
+    assert 'Partidos en España' not in labels and 'Agenda de hoy' not in labels
     assert labels[0] == 'Fútbol'
 
 

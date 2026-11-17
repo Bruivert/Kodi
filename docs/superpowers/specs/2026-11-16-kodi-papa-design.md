@@ -8,6 +8,8 @@ El padre del usuario no se aclara con la skin por defecto de Kodi (Estuary). Que
 
 - Películas, Series y Novedades salen de **Palantir** (ya vinculado a AllDebrid en la caja).
 - Deportes tiene subsecciones sacadas de **BlackGhost**: Fútbol, Baloncesto, NFL, Pádel, Fórmula 1, MotoGP y UFC.
+  - **Cambio de la 1.0.10 (17/11/2026):** BlackGhost 8.0.66 no tiene carpetas por deporte; ordena por fuentes ("agendas" y listas de canales). Las filas son: Agenda de hoy (AGENDA DEPORTESPLUS sin "+", en hora de España; si no, AGENDA LIVE o cualquier agenda), Partidos en España (AGENDA DEL DIA CIRACO, Acestream), Fútbol/Baloncesto/NFL/Motor/UFC (las carpetas de AGENDA NSPORTS), Fórmula 1 en español (Formula 1 Replays) y Canales Acestream (ACESTREAM MIXTO, que el padre ya tenía en favoritos). Pádel no existe.
+  - El código (p. ej. `n17`) va dentro de las rutas (`0-deportes.php?n17`); con uno caducado salen vacías. Se guarda en el ajuste `bg_codigo` del asistente, que lo escribe en `addon_data/plugin.video.blackghost/codeservernew.txt` (BlackGhost entra con él sin preguntar, aunque sea temporal). Si el código cambia, el servicio vuelve a buscar las filas y rehace el menú. Nunca se abre BlackGhost desde el servicio sin código guardado: "INGRESAR AL ADDON" abriría un teclado.
 - El código de BlackGhost cambia cada cierto tiempo y se saca de su Telegram (el enlace o QR aparece dentro del propio addon). Al usuario le gustaría que eso fuera automático.
 - **Favoritos**: el padre guarda lo que le gusta y lo encuentra en un sitio fijo.
 - En Películas y Series se ve la **valoración de IMDb**.

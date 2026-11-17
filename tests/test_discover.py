@@ -28,21 +28,19 @@ def test_matches_respects_exclude():
 
 def test_classify_sends_futbol_americano_to_nfl_not_futbol():
     entries = [entry('Fútbol Americano', 'p://nfl'), entry('[COLOR red]Fútbol[/COLOR]', 'p://futbol')]
-    out = d.classify(entries, d.DEPORTES)
+    out = d.classify(entries, d.NSPORTS)
     assert out['nfl']['path'] == 'p://nfl'
     assert out['futbol']['path'] == 'p://futbol'
 
 
 def test_classify_uses_each_entry_once():
-    entries = [entry('Agenda de hoy - Fútbol', 'p://agenda')]
-    out = d.classify(entries, d.DEPORTES)
-    assert list(out) == ['agenda']
+    entries = [entry('Fútbol y baloncesto', 'p://mix')]
+    assert list(d.classify(entries, d.NSPORTS)) == ['futbol']
 
 
 def test_classify_ignores_files_and_missing_categories():
-    entries = [entry('Fútbol', 'p://futbol.mp4', filetype='file'), entry('UFC', 'p://ufc')]
-    out = d.classify(entries, d.DEPORTES)
-    assert out == {'ufc': {'label': 'UFC', 'path': 'p://ufc'}}
+    entries = [entry('Fútbol', 'p://futbol.mp4', filetype='file'), entry('MMA / UFC / Box', 'p://ufc')]
+    assert d.classify(entries, d.NSPORTS) == {'ufc': {'label': 'MMA / UFC / Box', 'path': 'p://ufc'}}
 
 
 # --- discover with fake addon trees -------------------------------------
@@ -57,11 +55,23 @@ TREE = {
                        entry('Mejor valoradas', PAL + '?m=p_top'), entry('Géneros', PAL + '?m=p_gen')],
     PAL + '?m=series': [entry('Populares', PAL + '?m=s_pop'), entry('En emisión', PAL + '?m=s_air'),
                         entry('Mejor valoradas', PAL + '?m=s_top'), entry('Novedades', PAL + '?m=s_new')],
-    BG: [entry('Cine', BG + '?c=cine'), entry('[COLOR lime]DEPORTES[/COLOR]', BG + '?c=dep')],
-    BG + '?c=dep': [entry('Agenda', BG + '?d=agenda'), entry('Fútbol', BG + '?d=futbol'),
-                    entry('Fútbol Americano', BG + '?d=nfl'), entry('NBA / Baloncesto', BG + '?d=basket'),
-                    entry('Pádel', BG + '?d=padel'), entry('Fórmula 1', BG + '?d=f1'),
-                    entry('MotoGP', BG + '?d=motogp'), entry('UFC', BG + '?d=ufc')],
+    BG: [entry('INGRESAR AL ADDON', BG + '?entrar'), entry('Telegram:  @AddonBG', BG + '?tg', 'file')],
+    BG + '?entrar': [entry('B L A C K G H O S T', BG + '?na'), entry('Deportes', BG + '?dep'),
+                     entry('Cine', BG + '?cine'), entry('Agendas + Canales [B]● Acestreams[/B]', BG + '?ace')],
+    BG + '?dep': [entry('»» BUSCAR EVENTO', BG + '?buscar'), entry('CANALES DEPORTES+', BG + '?canales'),
+                  entry('[COLOR lime]AGENDA NSPORTS[/COLOR] ★★★', BG + '?nsports'),
+                  entry('AGENDA LIVE ★★★', BG + '?live'),
+                  entry('AGENDA DEPORTESPLUS+  st723  ★★', BG + '?dplus_latam'),
+                  entry('AGENDA DEPORTESPLUS  st723  ★', BG + '?dplus'),
+                  entry('Formula 1 Replays', BG + '?f1'), entry('Dazn F1 Opcion 1', BG + '?dazn', 'file')],
+    BG + '?nsports': [entry('EN VIVO AHORA', BG + '?ns_live'), entry('Fútbol', BG + '?ns_futbol'),
+                      entry('Basketball', BG + '?ns_basket'), entry('Fútbol Americano', BG + '?ns_nfl'),
+                      entry('Tenis', BG + '?ns_tenis'), entry('Motorsport', BG + '?ns_motor'),
+                      entry('MMA / UFC / Box', BG + '?ns_ufc')],
+    BG + '?ace': [entry('► ACESTREAMID', BG + '?aceid'), entry('►  ACESTREAMᵅ    KS', BG + '?ks'),
+                  entry('►  ACESTREAMᵅ    MIXTO', BG + '?mixto'),
+                  entry('►  AGENDA DEL DIA   ArenaView', BG + '?arena'),
+                  entry('►  AGENDA DEL DIA   CIRACO', BG + '?ciraco')],
 }
 
 ADDONS = {'palantir': 'plugin.video.palantir3', 'black ghost': 'plugin.video.blackghost'}
@@ -95,21 +105,43 @@ def test_discover_palantir_finds_all_lists():
     assert out['series']['novedades']['path'] == PAL + '?m=s_new'
 
 
-def test_discover_blackghost_finds_every_sport_and_agenda():
+def test_discover_blackghost_enters_with_the_code_and_finds_every_row():
     out = d.discover_blackghost(list_dir, find_addon, never_ask)
     assert out['id'] == 'plugin.video.blackghost'
-    assert out['agenda']['path'] == BG + '?d=agenda'
-    sports = out['deportes']
-    assert [k for k in d.DEPORTES if k != 'agenda'] == list(sports)
-    assert sports['nfl']['path'] == BG + '?d=nfl'
-    assert sports['futbol']['path'] == BG + '?d=futbol'
-    assert sports['baloncesto']['path'] == BG + '?d=basket'
-    assert sports['f1']['path'] == BG + '?d=f1'
+    # DEPORTESPLUS sin "+" va en hora de España; la "+" es la latina.
+    assert out['agenda'] == {'label': 'AGENDA DEPORTESPLUS st723 ★', 'path': BG + '?dplus'}
+    assert {k: v['path'] for k, v in out['deportes'].items()} == {
+        'espana': BG + '?ciraco', 'futbol': BG + '?ns_futbol', 'baloncesto': BG + '?ns_basket',
+        'nfl': BG + '?ns_nfl', 'motor': BG + '?ns_motor', 'f1': BG + '?f1', 'ufc': BG + '?ns_ufc',
+        'canales': BG + '?mixto'}
 
 
-def test_unrecognised_required_folder_is_chosen_by_hand():
+def test_blackghost_agenda_falls_back_to_live_then_any_agenda():
+    tree = dict(TREE)
+    tree[BG + '?dep'] = [e for e in TREE[BG + '?dep'] if 'DEPORTESPLUS' not in e['label']]
+    assert d.discover_blackghost(lambda p: tree.get(p, []), find_addon, never_ask)['agenda']['path'] == BG + '?live'
+    tree[BG + '?dep'] = [entry('AGENDA ZICO ★★', BG + '?zico')]
+    assert d.discover_blackghost(lambda p: tree.get(p, []), find_addon, never_ask)['agenda']['path'] == BG + '?zico'
+
+
+def test_blackghost_without_the_entry_screen_looks_in_its_root():
+    tree = {BG: [entry('Cine', BG + '?cine'), entry('[COLOR lime]DEPORTES[/COLOR]', BG + '?dep')],
+            BG + '?dep': [entry('AGENDA LIVE', BG + '?live')]}
+    out = d.discover_blackghost(lambda p: tree.get(p, []), find_addon, never_ask)
+    assert out['agenda']['path'] == BG + '?live' and out['deportes'] == {}
+
+
+def test_blackghost_with_a_wrong_code_finds_nothing_and_does_not_ask_for_rows():
+    tree = {BG: TREE[BG], BG + '?entrar': [entry('Código n16 inválido o inexistente', BG + '?na', 'file')]}
+    asked = []
+    out = d.discover_blackghost(lambda p: tree.get(p, []), find_addon, lambda t, l: asked.append(t) or -1)
+    assert out == {'id': 'plugin.video.blackghost', 'deportes': {}}
+    assert asked == []  # no hay carpetas entre las que elegir
+
+
+def test_unrecognised_deportes_folder_is_chosen_by_hand():
     tree = {BG: [entry('Zona Ghost', BG + '?c=x'), entry('Eventos en vivo', BG + '?c=ev')],
-            BG + '?c=ev': [entry('UFC', BG + '?d=ufc')]}
+            BG + '?c=ev': [entry('AGENDA LIVE', BG + '?live')]}
     asked = []
 
     def ask(title, labels):
@@ -118,7 +150,7 @@ def test_unrecognised_required_folder_is_chosen_by_hand():
 
     out = d.discover_blackghost(lambda p: tree.get(p, []), find_addon, ask)
     assert asked and 'Deportes' in asked[0][0]
-    assert out['deportes'] == {'ufc': {'label': 'UFC', 'path': BG + '?d=ufc'}}
+    assert out['agenda']['path'] == BG + '?live'
 
 
 def test_skipping_required_folder_leaves_category_absent():
