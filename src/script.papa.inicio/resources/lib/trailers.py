@@ -1,20 +1,44 @@
 # -*- coding: utf-8 -*-
 """Tráileres en español de España (nunca latino ni inglés) desde la API de TMDb. Puro: la
 petición HTTP llega inyectada."""
+import unicodedata
 from urllib.parse import urlencode
 
 TMDB = 'https://api.themoviedb.org/3'
+OEMBED = 'https://www.youtube.com/oembed'
+
+# TMDb a veces marca como es-ES vídeos que se oyen en inglés: subtitulados, o directamente mal etiquetados (para
+# "Enfrentados: Marfil" da "Drawn Together - Official Teaser | Prime Video Canada"). Se mira también el título.
+SUBTITLED = ('subtitulad', 'vose', 'v.o.s', 'version original')
+ENGLISH = ('official',)
+SPANISH = ('espanol', 'castellano', 'doblad', 'oficial')  # "oficial" no está dentro de "official"
+
+
+def _plain(text):
+    return unicodedata.normalize('NFKD', text or '').encode('ascii', 'ignore').decode('ascii').lower()
+
+
+def looks_english(title):
+    """Por el título: subtitulado (se oye el original) o en inglés sin ninguna marca de español."""
+    text = _plain(title)
+    if any(m in text for m in SUBTITLED):
+        return True
+    return any(m in text for m in ENGLISH) and not any(m in text for m in SPANISH)
+
+
+def spain_trailers(videos):
+    """Tráileres es-ES de YouTube, del mejor al peor."""
+    valid = [v for v in videos or []
+             if v.get('site') == 'YouTube' and v.get('type') == 'Trailer'
+             and v.get('iso_639_1') == 'es' and v.get('iso_3166_1') == 'ES' and v.get('key')]
+    return sorted(valid, key=lambda v: (bool(v.get('official')), v.get('size') or 0, v.get('published_at') or ''),
+                  reverse=True)
 
 
 def pick_spain_trailer(videos):
     """Clave de YouTube del mejor tráiler es-ES, o None."""
-    valid = [v for v in videos or []
-             if v.get('site') == 'YouTube' and v.get('type') == 'Trailer'
-             and v.get('iso_639_1') == 'es' and v.get('iso_3166_1') == 'ES' and v.get('key')]
-    if not valid:
-        return None
-    best = max(valid, key=lambda v: (bool(v.get('official')), v.get('size') or 0, v.get('published_at') or ''))
-    return best['key']
+    found = spain_trailers(videos)
+    return found[0]['key'] if found else None
 
 
 def _url(path, api_key, **params):
@@ -56,8 +80,20 @@ def resolve_tmdb_id(kind, tmdb_id, imdb_id, title, year, api_key, http_get):
     return results[0].get('id') if results else None
 
 
+def oembed_url(key):
+    return '%s?%s' % (OEMBED, urlencode({'url': 'https://www.youtube.com/watch?v=%s' % key, 'format': 'json'}))
+
+
 def spain_trailer(kind, tmdb_id, api_key, http_get):
-    return pick_spain_trailer(_get(http_get, videos_url(kind, tmdb_id, api_key)).get('results'))
+    for video in spain_trailers(_get(http_get, videos_url(kind, tmdb_id, api_key)).get('results')):
+        if looks_english(video.get('name')):
+            continue  # TMDb ya dice que es subtitulado
+        # Si YouTube no contesta no se puede comprobar: vale la elección de TMDb (y no se guarda en caché).
+        title = _get(http_get, oembed_url(video['key'])).get('title')
+        if title and looks_english(title):
+            continue
+        return video['key']
+    return None
 
 
 def youtube_url(key):

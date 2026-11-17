@@ -87,3 +87,77 @@ def test_spain_trailer_end_to_end_and_errors():
 
 def test_youtube_url():
     assert t.youtube_url('abc') == 'plugin://plugin.video.youtube/play/?video_id=abc'
+
+
+# Títulos reales en YouTube de los tráileres que eligió TMDb como es-ES en la caja (17/11/2026).
+SPANISH_TITLES = [
+    'La bola negra: Tráiler oficial | Movistar Plus',
+    'VERITY. LA SOMBRA DE UN ENGAÑO | Téaser Tráiler Oficial en español. 2 de octubre en cines.',
+    'En el corazón de la bestia | Tráiler Oficial | Paramount Pictures Spain',
+    'Prácticamente magia 2 | Tráiler Oficial',
+    'LA MANGOSTA Tráiler Español Oficial (2026) Liam Neeson, Acción',
+    'Puño de león - Tráiler español',
+    'Resident Evil | Nuevo Tráiler Oficial en español HD. En cines 18 de septiembre.',
+    'Matchbox: la película — Tráiler oficial | Apple TV',
+]
+# Para "Enfrentados: Marfil", TMDb da como es-ES este teaser inglés.
+MARFIL = 'Drawn Together - Official Teaser | Prime Video Canada'
+
+
+def test_looks_english_only_for_english_or_subtitled_titles():
+    assert not any(t.looks_english(x) for x in SPANISH_TITLES)
+    assert t.looks_english(MARFIL)
+    assert t.looks_english('Tráiler oficial subtitulado')  # se oye el original, en inglés
+    assert t.looks_english('Matchbox - Tráiler VOSE')
+    assert not t.looks_english('Official Trailer (Español)')  # mezcla, pero dice que es en español
+    assert not t.looks_english('')
+    assert not t.looks_english(None)
+
+
+class FakeWeb:
+    """TMDb por ruta y YouTube (oEmbed) por clave de vídeo."""
+
+    def __init__(self, routes, titles):
+        self.routes, self.titles, self.calls = routes, titles, []
+
+    def __call__(self, url):
+        self.calls.append(url)
+        parsed = urlparse(url)
+        if parsed.path == '/oembed':
+            key = parse_qs(parsed.query)['url'][0].rsplit('v=', 1)[-1]
+            if key not in self.titles:
+                raise IOError('404 oembed ' + key)
+            return {'title': self.titles[key], 'author_name': 'canal'}
+        if parsed.path not in self.routes:
+            raise IOError('404 ' + parsed.path)
+        return self.routes[parsed.path]
+
+
+def test_english_trailer_mislabelled_as_spain_spanish_is_skipped():
+    vids = [video('lc7LU9fhgG0', size=2160), video('bueno', size=1080)]
+    web = FakeWeb({'/3/movie/1440098/videos': {'results': vids}},
+                  {'lc7LU9fhgG0': MARFIL, 'bueno': 'Enfrentados: Marfil | Tráiler oficial'})
+    assert t.spain_trailer('movie', 1440098, 'K', web) == 'bueno'
+
+
+def test_only_english_candidates_give_nothing():
+    web = FakeWeb({'/3/movie/1440098/videos': {'results': [video('lc7LU9fhgG0')]}}, {'lc7LU9fhgG0': MARFIL})
+    assert t.spain_trailer('movie', 1440098, 'K', web) is None
+
+
+def test_subtitled_name_in_tmdb_is_skipped_without_asking_youtube():
+    vids = [dict(video('vose', size=2160), name='Tráiler subtitulado'), dict(video('dob'), name='Tráiler doblado')]
+    web = FakeWeb({'/3/movie/7/videos': {'results': vids}}, {'dob': 'Peli | Tráiler oficial'})
+    assert t.spain_trailer('movie', 7, 'K', web) == 'dob'
+    assert not [c for c in web.calls if 'vose' in c]
+
+
+def test_unverifiable_youtube_title_keeps_tmdb_choice():
+    web = FakeWeb({'/3/movie/7/videos': {'results': [video('es1')]}}, {})  # YouTube no contesta
+    assert t.spain_trailer('movie', 7, 'K', web) == 'es1'
+
+
+def test_oembed_url_asks_youtube_for_the_video():
+    q = parse_qs(urlparse(t.oembed_url('abc')).query)
+    assert urlparse(t.oembed_url('abc')).netloc == 'www.youtube.com'
+    assert q['url'] == ['https://www.youtube.com/watch?v=abc'] and q['format'] == ['json']

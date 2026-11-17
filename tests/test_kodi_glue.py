@@ -217,8 +217,9 @@ def test_trailer_lookup_is_retried_after_a_network_failure(monkeypatch):
     resolver = fresh_service(monkeypatch, flaky).Resolver()
     assert resolver('movie', '603', '', 'Matrix', '1999') is None
     assert resolver('movie', '603', '', 'Matrix', '1999') == 'abc'
+    asked = len(calls)
     assert resolver('movie', '603', '', 'Matrix', '1999') == 'abc'
-    assert len(calls) == 2  # lo bueno sí se guarda
+    assert len(calls) == asked  # lo bueno sí se guarda
 
 
 def test_movie_without_spain_trailer_is_not_asked_again(monkeypatch):
