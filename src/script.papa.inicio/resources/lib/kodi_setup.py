@@ -8,7 +8,7 @@ import xbmcaddon
 import xbmcgui
 import xbmcvfs
 
-from resources.lib import diagnostico, discover, menus
+from resources.lib import diagnostico, discover, menus, patches
 
 ADDON_ID = 'script.papa.inicio'
 TITLE = 'Kodi de Papá'
@@ -20,6 +20,7 @@ PROFILE = 'special://profile/addon_data/%s/' % ADDON_ID
 PRESET = PROFILE + 'preset/'
 RUTAS = PROFILE + 'rutas.json'
 PENDING = PROFILE + 'pendiente'
+BACKUP = PROFILE + 'backup/'
 INFORME = 'informe-kodi.txt'
 NODES = 'special://profile/addon_data/script.skinvariables/nodes/%s/' % SKIN
 NONE_LABEL = '— No está / saltar —'
@@ -282,6 +283,37 @@ def set_pending(flag):
         write_file(PENDING, '1')
     elif xbmcvfs.exists(PENDING):
         xbmcvfs.delete(PENDING)
+
+
+# --- arreglos a otros addons -------------------------------------------------
+
+# (addon, archivo dentro del addon, arreglo, ¿lo necesita esta versión?)
+PATCHES = [
+    (YOUTUBE, patches.YOUTUBE_FILE, patches.patch_youtube, patches.youtube_needs_patch),
+    (SKIN, patches.AF3_FILE, patches.patch_af3_rows, lambda version: True),
+]
+
+
+def apply_patches():
+    """Aplica los arreglos de patches.py que falten (tras instalar o actualizar YouTube o la skin) y guarda
+    antes el original en addon_data/script.papa.inicio/backup/. Devuelve los addons tocados."""
+    done = []
+    for addon_id, rel, patch, wanted in PATCHES:
+        version = addon_version(addon_id) if has_addon(addon_id) else ''
+        if not version or not wanted(version):
+            continue
+        path = 'special://home/addons/%s/%s' % (addon_id, rel)
+        text = read_file(path)
+        new = patch(text) if text else None
+        if not new:
+            continue
+        backup = BACKUP + '%s-%s-%s.orig' % (addon_id, version, rel.rsplit('/', 1)[-1])
+        if not xbmcvfs.exists(backup):
+            write_file(backup, text)
+        write_file(path, new)
+        log('arreglo aplicado a %s %s' % (addon_id, version))
+        done.append(addon_id)
+    return done
 
 
 # --- diagnóstico ------------------------------------------------------------
