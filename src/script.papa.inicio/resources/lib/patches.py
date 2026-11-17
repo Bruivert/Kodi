@@ -14,14 +14,15 @@ _YOUTUBE_NEW = ("('auth_enabled|no_kids|av1|vp9.2|avc1|surround_sound', (\n"
                 "                # 'android_vr',  # disabled by script.papa.inicio: GVS 403"
                 " (plugin.video.youtube issue 1483)\n")
 
-# Arctic Fuse 3: las filas de carátulas (grupo 500 de Includes_Hubs.xml) se atenúan mientras suena nuestro
-# tráiler y vuelven en cuanto se toca el mando (System.IdleTime vuelve a 0).
+# Arctic Fuse 3: las filas de carátulas (grupo 500 de Includes_Hubs.xml) desaparecen del todo, despacio y con
+# curva suave, mientras suena nuestro tráiler, y vuelven igual de suaves al tocar el mando (System.IdleTime a 0).
 AF3_FILE = '1080i/Includes_Hubs.xml'
 TRAILER_PROPERTY = 'papa.trailer'
-ROWS_FADE = ('<animation effect="fade" start="100" end="25" time="500" condition="String.IsEqual('
-             'Window(Home).Property(%s),1) + System.IdleTime(3) + !Window.IsActive(fullscreenvideo)">'
-             'Conditional</animation><!-- %s -->' % (TRAILER_PROPERTY, MARK))
+ROWS_FADE = ('<animation effect="fade" start="100" end="0" time="1500" tween="sine" easing="inout" '
+             'condition="String.IsEqual(Window(Home).Property(%s),1) + System.IdleTime(3) '
+             '+ !Window.IsActive(fullscreenvideo)">Conditional</animation><!-- %s -->' % (TRAILER_PROPERTY, MARK))
 _ROWS_GROUP = re.compile(r'^([ \t]*)<control type="group" id="500">\n([ \t]*)', re.M)
+_OUR_LINES = re.compile(r'^[ \t]*<animation [^\n]*<!-- %s -->\n' % re.escape(MARK), re.M)
 
 
 def youtube_needs_patch(version):
@@ -35,8 +36,10 @@ def patch_youtube(text):
 
 
 def patch_af3_rows(text):
-    if MARK in text or not _ROWS_GROUP.search(text):
+    clean = _OUR_LINES.sub('', text)  # quita un fundido nuestro de otra versión
+    if not _ROWS_GROUP.search(clean):
         return None
     # La animación va como primer hijo del grupo, con la sangría de sus hijos.
-    return _ROWS_GROUP.sub(lambda m: '%s<control type="group" id="500">\n%s%s\n%s' % (
-        m.group(1), m.group(2), ROWS_FADE, m.group(2)), text)
+    new = _ROWS_GROUP.sub(lambda m: '%s<control type="group" id="500">\n%s%s\n%s' % (
+        m.group(1), m.group(2), ROWS_FADE, m.group(2)), clean)
+    return None if new == text else new

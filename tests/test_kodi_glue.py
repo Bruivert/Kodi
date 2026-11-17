@@ -230,3 +230,37 @@ def test_movie_without_spain_trailer_is_not_asked_again(monkeypatch):
     assert resolver('movie', '603', '', 'Matrix', '1999') is None
     assert resolver('movie', '603', '', 'Matrix', '1999') is None
     assert len(calls) == 1
+
+
+class FakeAddon(object):
+    def __init__(self, values):
+        self.values = values
+
+    def getSetting(self, sid):
+        return self.values.get(sid, '')
+
+    def setSetting(self, sid, value):
+        self.values[sid] = value
+
+
+def fake_youtube(monkeypatch, values, installed=True):
+    monkeypatch.setattr(ks, 'has_addon', lambda a: installed and a == ks.YOUTUBE)
+    monkeypatch.setattr(ks.xbmcaddon, 'Addon', lambda addon_id=None: FakeAddon(values))
+    monkeypatch.setattr(ks, 'log', lambda msg: None)
+
+
+def test_youtube_is_set_to_spain_spanish_so_it_never_picks_the_english_auto_dub(monkeypatch):
+    # En la caja YouTube venía en en-US y "La bola negra" sonaba con el doblaje automático en inglés.
+    values = {'youtube.language': 'en-US', 'youtube.region': 'US'}
+    fake_youtube(monkeypatch, values)
+    assert ks.apply_youtube_spanish()
+    assert values == {'youtube.language': 'es', 'youtube.region': 'ES'}
+    assert not ks.apply_youtube_spanish()  # ya estaba
+
+
+def test_youtube_spanish_leaves_an_existing_spanish_choice_and_missing_addon_alone(monkeypatch):
+    values = {'youtube.language': 'es', 'youtube.region': 'ES'}
+    fake_youtube(monkeypatch, values)
+    assert not ks.apply_youtube_spanish()
+    fake_youtube(monkeypatch, {}, installed=False)
+    assert not ks.apply_youtube_spanish()

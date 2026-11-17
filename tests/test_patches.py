@@ -79,3 +79,20 @@ def test_af3_patch_is_applied_once_and_ignores_other_skins():
 
 def test_af3_fade_condition_uses_the_property_the_service_sets():
     assert 'Window(Home).Property(%s)' % pt.TRAILER_PROPERTY in pt.ROWS_FADE
+
+
+def test_af3_fade_hides_the_rows_completely_and_gently():
+    assert 'start="100" end="0"' in pt.ROWS_FADE  # desaparecen del todo
+    assert 'tween="sine"' in pt.ROWS_FADE and 'easing="inout"' in pt.ROWS_FADE  # sin brusquedad
+    assert 'time="1500"' in pt.ROWS_FADE
+
+
+def test_af3_patch_upgrades_the_old_partial_fade():
+    old_line = ('<animation effect="fade" start="100" end="25" time="500" condition="String.IsEqual('
+                'Window(Home).Property(papa.trailer),1) + System.IdleTime(3) + !Window.IsActive(fullscreenvideo)">'
+                'Conditional</animation><!-- script.papa.inicio -->')
+    old = pt.patch_af3_rows(AF3).replace(pt.ROWS_FADE, old_line)  # una caja con la 1.0.3/1.0.4
+    new = pt.patch_af3_rows(old)
+    assert new == pt.patch_af3_rows(AF3)
+    assert 'end="25"' not in new
+    assert pt.patch_af3_rows(new) is None

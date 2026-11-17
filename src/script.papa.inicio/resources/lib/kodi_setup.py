@@ -154,6 +154,20 @@ def ask_keys():
             set_setting(sid, value.strip())
 
 
+def apply_youtube_spanish():
+    """YouTube elige la pista de audio según su propio idioma (en-US de fábrica) y muchos tráileres españoles
+    traen además el doblaje automático al inglés: sonaba ese. En español de España suena la pista española."""
+    if not has_addon(YOUTUBE):
+        return False
+    youtube = xbmcaddon.Addon(YOUTUBE)
+    if youtube.getSetting('youtube.language')[:2] == 'es' and youtube.getSetting('youtube.region') == 'ES':
+        return False
+    youtube.setSetting('youtube.language', 'es')  # 'hl' de YouTube para el español de España
+    youtube.setSetting('youtube.region', 'ES')
+    log('YouTube en español de España')
+    return True
+
+
 def apply_tmdbhelper():
     if not has_addon(TMDBH):
         return False

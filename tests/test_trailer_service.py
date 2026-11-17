@@ -459,6 +459,9 @@ def test_rows_fade_while_our_trailer_plays_and_come_back_when_it_stops():
     assert k.dims == []  # recién empezado: aún no
     p.pos = 2.0
     s.tick()
+    assert k.dims == []  # se deja que el tráiler arranque antes de quitar las carátulas
+    p.pos = 3.5
+    s.tick()
     assert k.dims == [True]
     run(s, k, 3)
     assert k.dims == [True]  # una sola vez
@@ -479,7 +482,7 @@ def test_rows_come_back_when_a_trailer_stalls():
     w = FakeWatch()
     s, k, p, _ = make(watch=w)
     run(s, k, 5)
-    p.pos = 3.0
+    p.pos = 3.5
     s.tick()
     w.fails = 2
     run(s, k, 1)
@@ -498,7 +501,7 @@ def test_trailer_that_opens_very_late_is_still_ours():
     run(s, k, 5)
     run(s, k, 180)
     youtube_starts(p)
-    p.pos = 3.0
+    p.pos = 3.5
     s.tick()
     assert k.dims == [True]  # suena como nuestro
     w.fails = 2
@@ -527,7 +530,7 @@ def test_pending_trailer_never_closes_an_unrelated_dialog():
     assert k.closed == 0
     k.conds['Window.IsVisible(okdialog)'] = False
     youtube_starts(p)
-    p.pos = 3.0
+    p.pos = 3.5
     s.tick()
     assert k.dims == [True]  # y el tráiler sigue siendo nuestro
 

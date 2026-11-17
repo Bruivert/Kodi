@@ -118,6 +118,7 @@ def main():
     monitor = xbmc.Monitor()
     try:  # tras actualizarse YouTube o la skin, se vuelven a aplicar los arreglos (la skin, al siguiente arranque)
         ks.apply_patches()
+        ks.apply_youtube_spanish()
     except Exception as exc:
         ks.log('arreglos: %s' % exc)
     dim_rows(False)
