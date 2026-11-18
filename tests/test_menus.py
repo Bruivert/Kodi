@@ -201,7 +201,9 @@ def test_rows_have_a_fixed_order_so_kodi_does_not_reload_them_with_every_trailer
     # Kodi recarga las filas "sin orden" cada vez que empieza o acaba una reproducción; con las de Palantir eso
     # tenía la CPU ocupada 15 s y el siguiente tráiler esperaba. Con un orden fijo no las recarga.
     files = m.build_preset(RUTAS)
-    rows = [item for name, items in files.items() if name.endswith('widgets.json') for item in items]
+    # Las fuentes de la búsqueda no son filas de Kodi: sus resultados los pide y coloca skinvariables.
+    rows = [item for name, items in files.items()
+            if name.endswith('widgets.json') and name != m.FILE % 'searchwidgets' for item in items]
     assert rows and all(r.get('widget_sortby') == 'track' for r in rows)
 
 
@@ -281,3 +283,21 @@ def test_sports_rows_and_spotlight_come_from_the_copy_but_buttons_open_blackghos
     # Los botones no cargan nada hasta pulsarlos: van directos a BlackGhost, también los que no son fila.
     sub = files[f('1104submenu')]
     assert all(s['path'].startswith(BG) for s in sub)
+
+
+def test_search_hub_has_palantir_movies_and_series_only():
+    files = m.build_preset(RUTAS)
+    assert files[m.FILE % 'searchwidgets'] == [
+        {'label': 'Películas', 'icon': 'special://skin/extras/icons/film.png',
+         'path': 'plugin://script.papa.inicio/?buscar=peliculas&q={query}', 'target': 'videos',
+         'widget_style': 'Poster'},
+        {'label': 'Series', 'icon': 'special://skin/extras/icons/tv.png',
+         'path': 'plugin://script.papa.inicio/?buscar=series&q={query}', 'target': 'videos', 'widget_style': 'Poster'}]
+    assert m.build_preset({})[m.FILE % 'searchwidgets'] == files[m.FILE % 'searchwidgets']
+
+
+def test_search_has_no_tmdb_discover_rows_and_menu_is_rebuilt():
+    b = m.skin_builtins(RUTAS, 'x/', 'now')
+    discover = b.index('Skin.SetBool(HomeSwitcher.Search.DisableDiscover)')
+    assert discover < next(i for i, x in enumerate(b) if 'copy_menufolder' in x)
+    assert m.MENU_VERSION == 10

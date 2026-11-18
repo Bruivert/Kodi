@@ -10,6 +10,14 @@ SKIN = 'skin.arctic.fuse.3'
 FILE = 'skinvariables-shortcut-%s.json'
 # Los favoritos de Kodi con su fanart y ficha de TMDb (plugin.py del asistente): favourites:// no los trae.
 FAVOURITES = 'plugin://script.papa.inicio/?lista=favoritos'
+# Fuentes de la búsqueda de AF3 (la lupa): el asistente busca en el catálogo de Palantir (catalogo.py).
+SEARCH = 'plugin://script.papa.inicio/?buscar=%s&q={query}'
+SEARCH_WIDGETS = [
+    {'label': 'Películas', 'icon': 'special://skin/extras/icons/film.png', 'path': SEARCH % 'peliculas',
+     'target': 'videos', 'widget_style': 'Poster'},
+    {'label': 'Series', 'icon': 'special://skin/extras/icons/tv.png', 'path': SEARCH % 'series',
+     'target': 'videos', 'widget_style': 'Poster'},
+]
 # Súbelo cuando cambie el formato del menú: las cajas que ya lo tienen montado lo vuelven a aplicar al arrancar.
 # 3: filas sin las listas de Palantir que piden Trakt ("Más vistas"), con "Recién añadidas" y "Nuevas series".
 # 4: Deportes con las agendas reales de BlackGhost (no tiene carpetas por deporte).
@@ -18,7 +26,8 @@ FAVOURITES = 'plugin://script.papa.inicio/?lista=favoritos'
 # 7: filas de Palantir servidas desde la copia del asistente (filas.py).
 # 8: también las filas de Deportes desde la copia (cada 15 min).
 # 9: guarda la búsqueda "Por título" de Palantir (la lupa, buscar.py).
-MENU_VERSION = 9
+# 10: la lupa abre la búsqueda de AF3 con Películas y Series del catálogo de Palantir.
+MENU_VERSION = 10
 # Kodi recarga las filas "sin orden" cada vez que empieza o acaba cualquier reproducción (para actualizar lo
 # visto). Con las de Palantir eso ocupaba Python 15 s tras cada tráiler y el siguiente esperaba. Con un orden fijo
 # no las recarga; "track" no cambia nada en películas y series (todas valen 0) y se respeta el orden de Palantir.
@@ -181,6 +190,7 @@ def build_preset(rutas):
     home.append(_row('Mis favoritos', FAVOURITES, 'Poster'))
     files[FILE % 'homewidgets'] = home
     files[FILE % 'homesubmenu'] = []
+    files[FILE % 'searchwidgets'] = [dict(w) for w in SEARCH_WIDGETS]
     return files
 
 
@@ -230,6 +240,8 @@ def skin_builtins(rutas, preset_folder, now, first_run=False):
             # Con la lupa: el menú circular de AF3 exige quitarla y hace falta para buscar películas y series.
             'Skin.SetBool(HomeSwitcher.LoopBack,false)',
             'Skin.SetBool(HomeSwitcher.DisableSearch,false)',
+            # La búsqueda sin las filas "Descubrir" de TMDb: desde ellas no se puede reproducir.
+            'Skin.SetBool(HomeSwitcher.Search.DisableDiscover)',
             'RunScript(script.skinvariables,copy_menufolder=%s,skin=%s,force=True)' % (folder, SKIN),
             'Skin.SetString(Shortcuts.RebuildDateTime,%s)' % now,
             'Skin.SetBool(SetupWizard.Pending,false)',
