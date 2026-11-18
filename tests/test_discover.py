@@ -207,11 +207,3 @@ def test_estrenos_is_not_the_recently_added_list_whatever_the_order():
     out = d.classify(pelis, d.PELICULAS)
     assert out['estrenos']['path'] == PAL + '?p=new' and out['recientes']['path'] == PAL + '?p=add'
 
-
-def test_palantir_search_by_title_is_found_for_the_magnifier():
-    out = d.discover_palantir(lambda p: REAL_TREE.get(p, []), find_addon, never_ask)
-    titles = {e['label']: e['file'] for e in REAL_PELIS}
-    shows = {e['label']: e['file'] for e in REAL_SERIES}
-    assert out['buscar'] == {'peliculas': titles['Por título'], 'series': shows['Por título']}
-    # No es una fila: no entra en las listas que se copian ni se pintan.
-    assert 'buscar' not in out['peliculas'] and 'buscar' not in out['series']

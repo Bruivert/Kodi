@@ -558,3 +558,10 @@ def test_patches_cover_the_search_texts_of_af3_and_skinvariables():
     targets = {(a, f) for a, f, _, _ in ks.PATCHES}
     assert (ks.SKIN, pt.AF3_STRINGS_FILE) in targets
     assert ('script.skinvariables', pt.SKINVARIABLES_STRINGS_FILE) in targets
+
+
+def test_old_magnifier_action_opens_the_af3_search():
+    # Hasta que la skin se recarga sin el parche de la 1.0.12, la lupa sigue llamando al asistente con "buscar".
+    src = open(os.path.join(ADDON_DIR, 'default.py'), encoding='utf-8').read()
+    assert 'run_multisearch' in src and 'buscar_en_palantir' not in src
+    assert not os.path.exists(os.path.join(ADDON_DIR, 'resources', 'lib', 'buscar.py'))
