@@ -138,3 +138,44 @@ def test_palantir_db_is_only_read(palantir_db, tmp_path):
     before = open(palantir_db, 'rb').read()
     cat.find(palantir_db, str(tmp_path / 'catalogo.db'), 'peliculas', 'ballena')
     assert open(palantir_db, 'rb').read() == before
+
+
+def test_one_search_gives_movies_then_series(palantir_db, tmp_path):
+    idx = str(tmp_path / 'catalogo.db')
+    both = cat.find(palantir_db, idx, cat.ALL, 'pitt')
+    assert [i['info']['mediatype'] for i in both] == ['tvshow']
+    mixed = cat.find(palantir_db, idx, cat.ALL, 'ballena 001')
+    assert [i['label'] for i in mixed] == ['Ballena 001']
+    assert cat.find(palantir_db, idx, cat.ALL, 'b') == []
+
+
+class Clock:
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+
+def test_index_is_kept_ready_in_the_background(palantir_db, tmp_path):
+    idx = str(tmp_path / 'catalogo.db')
+    clock, db = Clock(), {'path': palantir_db}
+    keeper = cat.IndexKeeper(lambda: db['path'], idx, clock)
+    assert keeper.tick() is None  # deja arrancar a Kodi
+    clock.t += cat.IndexKeeper.START_DELAY
+    assert keeper.tick() and cat.index_current(idx, cat.stamp(palantir_db))
+    assert keeper.tick() is None  # no vuelve a mirar hasta dentro de un rato
+    clock.t += cat.IndexKeeper.CHECK_EVERY
+    assert keeper.tick() is None  # la base no ha cambiado: nada que hacer
+    os.utime(palantir_db, (1, 1))  # Palantir actualiza su base
+    clock.t += cat.IndexKeeper.CHECK_EVERY
+    assert keeper.tick() and cat.index_current(idx, cat.stamp(palantir_db))
+    db['path'] = None  # Palantir desinstalado
+    clock.t += cat.IndexKeeper.CHECK_EVERY
+    assert keeper.tick() is None
+
+
+def test_catalogo_does_not_import_uuid():
+    # Cada búsqueda arranca el asistente de cero: en la caja cada importación cuenta (uuid, 0,04 s).
+    src = open(cat.__file__, encoding='utf-8').read()
+    assert 'import uuid' not in src

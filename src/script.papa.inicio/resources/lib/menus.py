@@ -10,12 +10,11 @@ SKIN = 'skin.arctic.fuse.3'
 FILE = 'skinvariables-shortcut-%s.json'
 # Los favoritos de Kodi con su fanart y ficha de TMDb (plugin.py del asistente): favourites:// no los trae.
 FAVOURITES = 'plugin://script.papa.inicio/?lista=favoritos'
-# Fuentes de la búsqueda de AF3 (la lupa): el asistente busca en el catálogo de Palantir (catalogo.py).
+# Fuente de la búsqueda de AF3 (la lupa): el catálogo de Palantir (catalogo.py). Una sola: cada fuente es una llamada
+# al asistente (~0,8 s de arranque en la caja) y AF3 ya pone una fila por tipo (Películas, Series).
 SEARCH = 'plugin://script.papa.inicio/?buscar=%s&q={query}'
 SEARCH_WIDGETS = [
-    {'label': 'Películas', 'icon': 'special://skin/extras/icons/film.png', 'path': SEARCH % 'peliculas',
-     'target': 'videos', 'widget_style': 'Poster'},
-    {'label': 'Series', 'icon': 'special://skin/extras/icons/tv.png', 'path': SEARCH % 'series',
+    {'label': 'Películas y series', 'icon': 'special://skin/extras/icons/search.png', 'path': SEARCH % 'todo',
      'target': 'videos', 'widget_style': 'Poster'},
 ]
 # Súbelo cuando cambie el formato del menú: las cajas que ya lo tienen montado lo vuelven a aplicar al arrancar.

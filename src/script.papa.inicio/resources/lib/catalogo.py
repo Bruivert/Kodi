@@ -10,7 +10,6 @@ import base64
 import os
 import sqlite3
 import unicodedata
-import uuid
 from urllib import parse
 
 PALANTIR = 'plugin://plugin.video.palantir3/?'
@@ -21,6 +20,7 @@ YOUTUBE = 'plugin://plugin.video.youtube/play/?video_id=%s'
 # solo lo que tiene enlaces. tipo → (tabla, tabla de enlaces, categorías)
 KINDS = {'peliculas': ('pelis', 'enlaces_pelis', ('Película',)),
          'series': ('series', 'enlaces_series', ('General', 'Retro', 'Reality'))}
+ALL = 'todo'  # películas y series en una sola llamada: la búsqueda de AF3 las pone en una fila por tipo
 LIMIT = 60  # por fila
 MIN_CHARS = 2  # con una letra saldría medio catálogo mientras se escribe
 FIELDS = ('tmdb', 'titulo', 'fecha', 'plot', 'poster', 'fondo', 'mpaa', 'genero', 'trailer', 'clearlogo', 'rating')
@@ -137,7 +137,7 @@ def build_index(db_path, index_path, db_stamp):
             rows += [(kind, tmdb, normalize(titulo)) for tmdb, titulo in src.execute(sql, categories)]
     finally:
         src.close()
-    tmp = '%s.%s.tmp' % (index_path, uuid.uuid4().hex[:8])
+    tmp = '%s.%s.tmp' % (index_path, os.urandom(4).hex())  # sin uuid: cada importación cuenta
     try:
         dst = sqlite3.connect(tmp)
         try:
@@ -200,7 +200,10 @@ def details(db_path, kind, tmdbs):
 
 
 def find(db_path, index_path, kind, text):
-    """La fila de la búsqueda: elementos de to_item, o [] si no hay base, el tipo no existe o el texto es corto."""
+    """La fila de la búsqueda: elementos de to_item, o [] si no hay base, el tipo no existe o el texto es corto.
+    Con ALL, las películas y luego las series."""
+    if kind == ALL:
+        return find(db_path, index_path, 'peliculas', text) + find(db_path, index_path, 'series', text)
     if not db_path or kind not in KINDS or len(normalize(text)) < MIN_CHARS:
         return []
     try:
@@ -210,3 +213,28 @@ def find(db_path, index_path, kind, text):
         return [to_item(kind, row) for row in details(db_path, kind, search(index_path, kind, text))]
     except (OSError, sqlite3.Error):
         return []
+
+
+class IndexKeeper(object):
+    """Tiene el índice listo desde el servicio, para que la primera búsqueda no lo haga (en la caja ~2 s, y con las
+    prisas de la primera búsqueda se hacía dos veces). db_path() da la ruta de la base de Palantir o None."""
+    START_DELAY = 60  # s: deja arrancar a Kodi
+    CHECK_EVERY = 600  # s: Palantir casi nunca cambia su base
+
+    def __init__(self, db_path, index_path, clock):
+        self.db_path, self.index_path, self.clock = db_path, index_path, clock
+        self.next_check = clock() + self.START_DELAY
+
+    def tick(self):
+        now = self.clock()
+        if now < self.next_check:
+            return None
+        self.next_check = now + self.CHECK_EVERY
+        db = self.db_path()
+        if not db:
+            return None
+        current = stamp(db)
+        if index_current(self.index_path, current):
+            return None
+        build_index(db, self.index_path, current)
+        return 'índice del catálogo de Palantir rehecho'

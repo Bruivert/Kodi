@@ -285,14 +285,13 @@ def test_sports_rows_and_spotlight_come_from_the_copy_but_buttons_open_blackghos
     assert all(s['path'].startswith(BG) for s in sub)
 
 
-def test_search_hub_has_palantir_movies_and_series_only():
+def test_search_hub_has_one_source_with_palantir_movies_and_series():
+    # Una sola fuente: cada fuente es una llamada al asistente (~0,8 s de arranque en la caja). La búsqueda de AF3
+    # reparte igual los resultados en una fila por tipo: Películas y Series.
     files = m.build_preset(RUTAS)
     assert files[m.FILE % 'searchwidgets'] == [
-        {'label': 'Películas', 'icon': 'special://skin/extras/icons/film.png',
-         'path': 'plugin://script.papa.inicio/?buscar=peliculas&q={query}', 'target': 'videos',
-         'widget_style': 'Poster'},
-        {'label': 'Series', 'icon': 'special://skin/extras/icons/tv.png',
-         'path': 'plugin://script.papa.inicio/?buscar=series&q={query}', 'target': 'videos', 'widget_style': 'Poster'}]
+        {'label': 'Películas y series', 'icon': 'special://skin/extras/icons/search.png',
+         'path': 'plugin://script.papa.inicio/?buscar=todo&q={query}', 'target': 'videos', 'widget_style': 'Poster'}]
     assert m.build_preset({})[m.FILE % 'searchwidgets'] == files[m.FILE % 'searchwidgets']
 
 
