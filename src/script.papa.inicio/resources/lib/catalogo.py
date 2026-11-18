@@ -7,12 +7,23 @@ pone en su lista: al elegir una, Palantir hace lo de siempre (enlaces y reproduc
 Puro: las rutas llegan de fuera.
 """
 import base64
+import os
+import sqlite3
 import unicodedata
+import uuid
 from urllib import parse
 
 PALANTIR = 'plugin://plugin.video.palantir3/?'
 IMAGES = 'https://image.tmdb.org/t/p/'
 YOUTUBE = 'plugin://plugin.video.youtube/play/?video_id=%s'
+
+# Lo mismo que busca "Por título" de Palantir (sus vistas v_pelis_Pelicula y v_series_General): esas categorías y
+# solo lo que tiene enlaces. tipo → (tabla, tabla de enlaces, categorías)
+KINDS = {'peliculas': ('pelis', 'enlaces_pelis', ('Película',)),
+         'series': ('series', 'enlaces_series', ('General', 'Retro', 'Reality'))}
+LIMIT = 60  # por fila
+MIN_CHARS = 2  # con una letra saldría medio catálogo mientras se escribe
+FIELDS = ('tmdb', 'titulo', 'fecha', 'plot', 'poster', 'fondo', 'mpaa', 'genero', 'trailer', 'clearlogo', 'rating')
 
 
 def _fold(ch):
@@ -100,3 +111,102 @@ def to_item(kind, row):
     return {'label': title, 'path': p3_url({k: v for k, v in fields.items() if v is not None}), 'folder': not movie,
             'art': {k: v for k, v in art.items() if v}, 'info': {k: v for k, v in info.items() if v not in (None, '')},
             'uniqueids': {'tmdb': str(row['tmdb'])}, 'properties': {'IsPlayable': 'true'} if movie else {}}
+
+
+# --- La base de Palantir (solo lectura) y nuestro índice de títulos ---
+
+def _read_only(db_path):
+    return sqlite3.connect('file:%s?mode=ro' % parse.quote(db_path), uri=True)
+
+
+def stamp(db_path):
+    """Fecha y tamaño de la base de Palantir: si cambian, se rehace el índice."""
+    st = os.stat(db_path)
+    return '%d-%d' % (int(st.st_mtime), st.st_size)
+
+
+def build_index(db_path, index_path, db_stamp):
+    """Títulos normalizados de lo que busca Palantir. Se escribe aparte y se cambia de golpe: las dos filas de la
+    búsqueda se piden a la vez y ninguna debe leer un índice a medias."""
+    src = _read_only(db_path)
+    try:
+        rows = []
+        for kind, (table, links, categories) in KINDS.items():
+            sql = 'SELECT tmdb, titulo FROM %s WHERE categoria IN (%s) AND tmdb IN (SELECT tmdb FROM %s)' % (
+                table, ','.join('?' * len(categories)), links)
+            rows += [(kind, tmdb, normalize(titulo)) for tmdb, titulo in src.execute(sql, categories)]
+    finally:
+        src.close()
+    tmp = '%s.%s.tmp' % (index_path, uuid.uuid4().hex[:8])
+    try:
+        dst = sqlite3.connect(tmp)
+        try:
+            dst.execute('CREATE TABLE titulos (kind TEXT, tmdb INTEGER, norm TEXT)')
+            dst.execute('CREATE TABLE meta (stamp TEXT)')
+            dst.executemany('INSERT INTO titulos VALUES (?, ?, ?)', rows)
+            dst.execute('INSERT INTO meta VALUES (?)', (db_stamp,))
+            dst.commit()
+        finally:
+            dst.close()
+        os.replace(tmp, index_path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def index_current(index_path, db_stamp):
+    if not os.path.exists(index_path):
+        return False
+    try:
+        con = sqlite3.connect(index_path)
+        try:
+            row = con.execute('SELECT stamp FROM meta').fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return False
+    return bool(row) and row[0] == db_stamp
+
+
+def search(index_path, kind, text, limit=LIMIT):
+    """tmdb de los títulos que contienen el texto: primero los que empiezan por él, luego por orden alfabético."""
+    query = normalize(text)  # sin % ni _: normalize quita los signos
+    if len(query) < MIN_CHARS:
+        return []
+    con = sqlite3.connect(index_path)
+    try:
+        rows = con.execute(
+            "SELECT tmdb FROM titulos WHERE kind = ? AND norm LIKE '%' || ? || '%' "
+            "ORDER BY CASE WHEN norm LIKE ? || '%' THEN 0 ELSE 1 END, norm LIMIT ?",
+            (kind, query, query, limit)).fetchall()
+    finally:
+        con.close()
+    return [tmdb for tmdb, in rows]
+
+
+def details(db_path, kind, tmdbs):
+    """Las fichas de la base de Palantir, en el orden de tmdbs."""
+    if not tmdbs:
+        return []
+    columns = FIELDS + (('duration',) if kind == 'peliculas' else ())
+    con = _read_only(db_path)
+    try:
+        rows = con.execute('SELECT %s FROM %s WHERE tmdb IN (%s)' % (
+            ', '.join(columns), KINDS[kind][0], ','.join('?' * len(tmdbs))), tmdbs).fetchall()
+    finally:
+        con.close()
+    found = {row[0]: dict(zip(columns, row)) for row in rows}
+    return [found[tmdb] for tmdb in tmdbs if tmdb in found]
+
+
+def find(db_path, index_path, kind, text):
+    """La fila de la búsqueda: elementos de to_item, o [] si no hay base, el tipo no existe o el texto es corto."""
+    if not db_path or kind not in KINDS or len(normalize(text)) < MIN_CHARS:
+        return []
+    try:
+        current = stamp(db_path)
+        if not index_current(index_path, current):
+            build_index(db_path, index_path, current)
+        return [to_item(kind, row) for row in details(db_path, kind, search(index_path, kind, text))]
+    except (OSError, sqlite3.Error):
+        return []
