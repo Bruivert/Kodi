@@ -17,7 +17,8 @@ FAVOURITES = 'plugin://script.papa.inicio/?lista=favoritos'
 # 6: Inicio · Películas · Series · Favoritos · Deportes (sin Novedades); Estrenos otra vez primera fila de Inicio.
 # 7: filas de Palantir servidas desde la copia del asistente (filas.py).
 # 8: también las filas de Deportes desde la copia (cada 15 min).
-MENU_VERSION = 8
+# 9: guarda la búsqueda "Por título" de Palantir (la lupa, buscar.py).
+MENU_VERSION = 9
 # Kodi recarga las filas "sin orden" cada vez que empieza o acaba cualquier reproducción (para actualizar lo
 # visto). Con las de Palantir eso ocupaba Python 15 s tras cada tráiler y el siguiente esperaba. Con un orden fijo
 # no las recarga; "track" no cambia nada en películas y series (todas valen 0) y se respeta el orden de Palantir.

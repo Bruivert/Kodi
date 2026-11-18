@@ -156,3 +156,27 @@ def test_keeper_does_not_reload_for_youtube_alone():
 def test_keeper_waits_while_something_plays_a_dialog_is_open_or_the_remote_is_in_use():
     for atom in ('!Player.HasMedia', '!System.HasActiveModalDialog', 'System.IdleTime(300)'):
         assert atom in [a.strip() for a in pt.QUIET.split('+')]
+
+
+# Arctic Fuse 3 3.5.4, 1080i/Includes_Home.xml: la lupa del menú.
+AF3_HOME = """    <include name="Home_ControlList_Item_MultiSearch">
+        <include content="Home_ControlList_Item">
+            <param name="label">$LOCALIZE[137]</param>
+            <param name="icon">special://skin/extras/icons/search.png</param>
+            <param name="action">RunScript(script.skinvariables,run_multisearch,tmdbhelper_container,progress_dialog$VAR[Value_MultiSearch_Layout_Param]$VAR[Value_MultiSearch_Discover_Param])</param>
+            <param name="enabled">[!Skin.HasSetting(HomeSwitcher.DisableSearch)]</param>
+        </include>
+    </include>
+"""
+
+
+def test_search_patch_makes_the_magnifier_search_in_palantir():
+    new = pt.patch_af3_search(AF3_HOME)
+    assert '<param name="action">RunScript(script.papa.inicio,buscar)</param>' in new
+    assert 'run_multisearch' not in new
+    assert new.count('\n') == AF3_HOME.count('\n')  # solo cambia esa línea
+
+
+def test_search_patch_is_applied_once_and_ignores_other_skins():
+    assert pt.patch_af3_search(pt.patch_af3_search(AF3_HOME)) is None
+    assert pt.patch_af3_search('<includes/>') is None

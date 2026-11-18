@@ -461,6 +461,7 @@ def set_pending(flag):
 PATCHES = [
     (YOUTUBE, patches.YOUTUBE_FILE, patches.patch_youtube, patches.youtube_needs_patch),
     (SKIN, patches.AF3_FILE, patches.patch_af3_rows, lambda version: True),
+    (SKIN, patches.AF3_HOME_FILE, patches.patch_af3_search, lambda version: True),
 ]
 
 

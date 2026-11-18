@@ -25,6 +25,12 @@ _ROWS_GROUP = re.compile(r'^([ \t]*)<control type="group" id="500">\n([ \t]*)', 
 _OUR_LINES = re.compile(r'^[ \t]*<animation [^\n]*<!-- %s -->\n' % re.escape(MARK), re.M)
 
 
+# Arctic Fuse 3: la lupa del menú abre la búsqueda de TMDb (no se puede reproducir); con esto busca en Palantir.
+AF3_HOME_FILE = '1080i/Includes_Home.xml'
+_SEARCH_ACTION = re.compile(r'<param name="action">RunScript\(script\.skinvariables,run_multisearch[^<]*</param>')
+SEARCH_ACTION = '<param name="action">RunScript(%s,buscar)</param>' % MARK
+
+
 # Arctic Fuse 3 se actualiza sola y deja el archivo de las filas como venía, y Kodi recarga la skin sin el fundido.
 # El servicio lo vuelve a arreglar cada poco y recarga la skin cuando nadie está usando Kodi.
 CHECK_EVERY = 10 * 60.0
@@ -67,3 +73,9 @@ def patch_af3_rows(text):
     new = _ROWS_GROUP.sub(lambda m: '%s<control type="group" id="500">\n%s%s\n%s' % (
         m.group(1), m.group(2), ROWS_FADE, m.group(2)), clean)
     return None if new == text else new
+
+
+def patch_af3_search(text):
+    if len(_SEARCH_ACTION.findall(text)) != 1:
+        return None  # ya aplicado, u otra skin
+    return _SEARCH_ACTION.sub(SEARCH_ACTION, text)
