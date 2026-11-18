@@ -116,7 +116,7 @@ def listar_fila(handle, key):
     cached = ks.load_fila(key)
     if path and not filas.usable(cached, path):
         files = ks.fetch_row(path)  # primera vez (o la lista cambió): se pide ahora y se guarda
-        if files:
+        if filas.keeps(files, key):
             cached = filas.entry(path, files, time.time())
             ks.save_fila(key, cached)
     items = (cached or {}).get('items') or []

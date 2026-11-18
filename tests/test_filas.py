@@ -96,7 +96,7 @@ def test_entry_is_usable_only_for_the_same_list():
     assert fl.usable(entry, PAL + '?estrenos')
     assert not fl.usable(entry, PAL + '?otra')  # el asistente volvió a buscar las listas y esta cambió
     assert not fl.usable(None, PAL + '?estrenos')
-    assert not fl.usable(fl.entry(PAL + '?estrenos', [], now=1000), PAL + '?estrenos')  # vacía: Palantir falló
+    assert fl.usable(fl.entry('plugin://bg/?agenda', [], now=1000), 'plugin://bg/?agenda')  # vacía también vale
 
 
 def test_next_to_refresh_takes_the_missing_then_the_oldest_stale():
@@ -176,3 +176,38 @@ def test_next_to_refresh_uses_the_shorter_age_for_sports():
     index = {'deportes.agenda': {'path': 'plugin://bg/?agenda', 'time': 0},
              'peliculas.estrenos': {'path': PAL + '?estrenos', 'time': 0}}
     assert fl.next_to_refresh(rows, index, now=fl.max_age('deportes.agenda')) == 'deportes.agenda'
+
+
+def test_only_sports_lists_may_be_empty():
+    # La agenda puede quedarse sin partidos (de madrugada, o con el código de BlackGhost caducado); "Estrenos" vacía
+    # es que Palantir ha fallado.
+    assert fl.keeps(None, 'deportes.agenda') is False  # fallo de red
+    assert fl.keeps([], 'deportes.agenda') is True
+    assert fl.keeps([], 'peliculas.estrenos') is False
+    assert fl.keeps([MOVIE], 'peliculas.estrenos') is True
+
+
+def test_refresher_saves_an_empty_agenda_instead_of_keeping_yesterdays():
+    clock = Clock(10000)
+    rows = {'deportes.agenda': 'plugin://bg/?agenda'}
+    index = {'deportes.agenda': {'path': 'plugin://bg/?agenda', 'time': 0}}
+    saved = {}
+    r = fl.Refresher(lambda: rows, lambda: index, lambda path: [], lambda k, e: saved.__setitem__(k, e),
+                     lambda: True, clock)
+    clock.t += fl.START_DELAY
+    assert r.tick() == 'deportes.agenda'
+    assert saved['deportes.agenda']['items'] == []
+    clock.t += fl.GAP
+    assert r.next_time == clock.t  # no es un fallo: no espera los 5 minutos
+
+
+def test_refresher_waits_on_a_network_failure():
+    clock = Clock(10000)
+    rows = {'deportes.agenda': 'plugin://bg/?agenda'}
+    saved = {}
+    r = fl.Refresher(lambda: rows, lambda: {}, lambda path: None, lambda k, e: saved.__setitem__(k, e),
+                     lambda: True, clock)
+    clock.t += fl.START_DELAY
+    assert r.tick() == 'deportes.agenda' and saved == {}
+    clock.t += fl.GAP
+    assert r.tick() is None  # espera FAIL_WAIT

@@ -372,3 +372,11 @@ def test_find_trailer_spanish_teaser_still_wins_over_the_original():
     web.routes['/3/movie/1440098/videos'] = {'results': [video('tGWJVIXNcNI', vtype='Teaser')]}
     web.titles['tGWJVIXNcNI'] = MARFIL_TEASER
     assert t.find_trailer('movie', 1440098, 'K', web, FakePost(yt_answer())) == 'tGWJVIXNcNI'
+
+
+def test_original_spanish_film_prefers_spain_but_keeps_latin_when_it_is_the_only_one():
+    # Película con idioma original español (p. ej. mexicana): el de España antes que el latino, aunque sea más viejo.
+    mexico = video('mx', 'es', 'MX', published='2026-09-01T00:00:00.000Z')
+    spain = video('es', 'es', 'ES', size=720, published='2026-01-01T00:00:00.000Z')
+    assert t.pick_original_trailer([mexico, spain], 'es') == 'es'
+    assert t.pick_original_trailer([mexico], 'es') == 'mx'  # sin el de España, mejor latino que quedarse sin tráiler

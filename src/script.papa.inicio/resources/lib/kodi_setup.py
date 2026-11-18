@@ -3,6 +3,7 @@
 import json
 import re
 import time
+import uuid
 
 import xbmc
 import xbmcaddon
@@ -23,7 +24,8 @@ RUTAS = PROFILE + 'rutas.json'
 PENDING = PROFILE + 'pendiente'
 BACKUP = PROFILE + 'backup/'
 FILAS = PROFILE + 'filas/'  # copias de las filas de Palantir (filas.py)
-FILAS_INDEX = FILAS + 'indice.json'
+FILAS_INDEX = FILAS + 'indice.json'  # 1.0.10: índice común (leer y reescribir); ya no se usa
+FILA_KEY = re.compile(r'^[a-z]+\.[a-z0-9]+$')  # "peliculas.estrenos": nada de "../" desde la URL del plugin
 ARTE = PROFILE + 'arte_deportes.json'  # fanart de TheSportsDB para Deportes (arte_deportes.py)
 MENU_VERSION_FILE = PROFILE + 'menu_version'
 # Donde BlackGhost guarda el código con el que entra sin preguntarlo (lo lee aunque sea uno temporal, como "n17").
@@ -63,12 +65,20 @@ def rpc(method, params=None):
 
 
 def write_file(path, text):
+    """De una vez: se escribe aparte y se renombra. Un corte de luz o dos escritores a la vez (el plugin y el servicio
+    guardando la misma copia) nunca dejan un archivo a medias."""
     xbmcvfs.mkdirs(path.rsplit('/', 1)[0] + '/')
-    f = xbmcvfs.File(path, 'w')
+    tmp = '%s.%s.tmp' % (path, uuid.uuid4().hex[:8])
+    f = xbmcvfs.File(tmp, 'w')
     try:
         f.write(bytearray(text.encode('utf-8')))
     finally:
         f.close()
+    if not xbmcvfs.rename(tmp, path):  # por si el sistema no deja renombrar encima de uno que ya existe
+        xbmcvfs.delete(path)
+        if not xbmcvfs.rename(tmp, path):
+            xbmcvfs.delete(tmp)
+            raise IOError('no se pudo escribir %s' % path)
 
 
 def read_file(path):
@@ -223,19 +233,30 @@ def _load_json(path, default):
 
 
 def load_fila(key):
+    if not FILA_KEY.match(key or ''):
+        return None
     return _load_json(FILAS + key + '.json', None)
 
 
 def load_fila_index():
-    """{fila: {'path', 'time'}} sin leer las copias enteras."""
-    return _load_json(FILAS_INDEX, {})
+    """{fila: {'path', 'time'}} sin leer las copias enteras: un .meta pequeño por fila, así dos escritores a la vez
+    no se pisan un índice común."""
+    try:
+        names = xbmcvfs.listdir(FILAS)[1]
+    except Exception:
+        return {}
+    index = {}
+    for name in names:
+        if name.endswith('.meta'):
+            meta = _load_json(FILAS + name, None)
+            if meta:
+                index[name[:-len('.meta')]] = meta
+    return index
 
 
 def save_fila(key, entry):
     write_file(FILAS + key + '.json', json.dumps(entry, ensure_ascii=False))
-    index = load_fila_index()
-    index[key] = {'path': entry['path'], 'time': entry['time']}
-    write_file(FILAS_INDEX, json.dumps(index, ensure_ascii=False))
+    write_file(FILAS + key + '.meta', json.dumps({'path': entry['path'], 'time': entry['time']}))
 
 
 def load_arte():
@@ -247,8 +268,12 @@ def save_arte(state):
 
 
 def fetch_row(path):
-    """La lista tal como la da el addon (Palantir), con todos los datos que pinta la skin."""
-    return rpc('Files.GetDirectory', {'directory': path, 'media': 'video', 'properties': filas.FIELDS}).get('files') or []
+    """La lista tal como la da el addon, con todos los datos que pinta la skin; None si falla (no es una lista
+    vacía: filas.keeps distingue las dos)."""
+    result = rpc('Files.GetDirectory', {'directory': path, 'media': 'video', 'properties': filas.FIELDS})
+    if not result:
+        return None
+    return result.get('files') or []
 
 
 def summary(rutas):

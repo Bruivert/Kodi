@@ -472,6 +472,8 @@ def test_tmdbhelper_gets_the_clean_omdb_key(monkeypatch):
 
 def test_saved_row_is_read_back_and_listed_in_the_index(monkeypatch):
     written, _ = fake_menu_files(monkeypatch, {})
+    monkeypatch.setattr(ks.xbmcvfs, 'listdir', lambda p: ([], sorted(
+        f[len(p):] for f in written if f.startswith(p) and '/' not in f[len(p):])))
     assert ks.load_fila('peliculas.estrenos') is None and ks.load_fila_index() == {}
     entry = {'path': 'plugin://p/?e', 'time': 100.0, 'items': [{'label': 'A'}]}
     ks.save_fila('peliculas.estrenos', entry)
@@ -488,6 +490,52 @@ def test_row_is_fetched_with_every_field_the_skin_shows(monkeypatch):
     assert ks.fetch_row('plugin://p/?e') == [{'a': 1}]
     assert asked == [('Files.GetDirectory', {'directory': 'plugin://p/?e', 'media': 'video',
                                              'properties': filas.FIELDS})]
+
+
+def test_fetch_row_tells_a_failure_from_an_empty_list(monkeypatch):
+    monkeypatch.setattr(ks, 'rpc', lambda method, params=None: {})  # error de JSON-RPC (rpc ya lo registra)
+    assert ks.fetch_row('plugin://p/?e') is None
+    monkeypatch.setattr(ks, 'rpc', lambda method, params=None: {'limits': {'total': 0}})
+    assert ks.fetch_row('plugin://p/?e') == []
+
+
+def test_each_row_has_its_own_meta_file_so_two_writers_never_lose_each_other(monkeypatch):
+    written, _ = fake_menu_files(monkeypatch, {})
+    entry = {'path': 'plugin://p/?e', 'time': 100.0, 'items': [{'label': 'A'}]}
+    ks.save_fila('peliculas.estrenos', entry)
+    assert json.loads(written[ks.FILAS + 'peliculas.estrenos.meta']) == {'path': 'plugin://p/?e', 'time': 100.0}
+    assert ks.FILAS_INDEX not in written  # ya no hay un índice común que leer y reescribir
+
+
+def test_write_file_replaces_the_file_in_one_step(monkeypatch):
+    import importlib
+    import resources.lib.kodi_setup as real
+    importlib.reload(real)  # sin los monkeypatch de otros tests
+    ops = []
+
+    class FakeFile(object):
+        def __init__(self, path, mode):
+            ops.append(('open', path))
+
+        def write(self, data):
+            ops.append(('write', bytes(data)))
+            return True
+
+        def close(self):
+            ops.append(('close',))
+    monkeypatch.setattr(real.xbmcvfs, 'File', FakeFile)
+    monkeypatch.setattr(real.xbmcvfs, 'mkdirs', lambda p: True)
+    monkeypatch.setattr(real.xbmcvfs, 'rename', lambda a, b: ops.append(('rename', a, b)) or True)
+    real.write_file('special://profile/x/a.json', '{}')
+    tmp = ops[0][1]
+    assert tmp != 'special://profile/x/a.json' and tmp.startswith('special://profile/x/a.json')
+    assert ops[1:] == [('write', b'{}'), ('close',), ('rename', tmp, 'special://profile/x/a.json')]
+
+
+def test_load_fila_only_accepts_the_known_rows(monkeypatch):
+    read = []
+    monkeypatch.setattr(ks, 'read_file', lambda p: read.append(p) or '')
+    assert ks.load_fila('../../../../favourites') is None and read == []
 
 
 def test_sports_art_is_saved_and_read_back(monkeypatch):
