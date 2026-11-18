@@ -50,7 +50,7 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 | Moverme | Flechas del mando |
 | Ver algo | **OK** |
 | Volver | **Atrás** |
-| Buscar una película o serie | La **lupa** del menú → escribe el título → **Películas** o **Series** → elige y **OK**. Es la búsqueda «Por título» de Palantir: el asistente la abre y le escribe lo que has puesto. **Atrás** vuelve a donde estabas. |
+| Buscar una película o serie | La **lupa** del menú → escribe el título con las letras de la pantalla (pulsando la barra sale el teclado completo; también se puede escribir desde el móvil). Salen dos filas, **Películas** y **Series** → elige y **OK**: Palantir enseña sus enlaces o las temporadas, como siempre. **Atrás** vuelve a la búsqueda. |
 | Guardarlo en Favoritos | Mantener pulsado **OK** (o el botón ☰) → **Añadir a favoritos** |
 | Ver mis favoritos | La sección **Favoritos** o la última fila del Inicio, **Mis favoritos**. Las películas y series salen con su fanart de fondo, como en Películas. |
 
@@ -77,7 +77,6 @@ Esta guía deja la Vontar X4 (Kodi 21 Omega) con un menú sencillo, estilo Apple
 | Una fila tarda en salir o no está al día | Las filas de Palantir y de Deportes salen de una copia que el asistente renueva sola (cada hora las películas y series, cada 15 min los deportes; empieza 2 min después de encender y cuando nadie toca el mando). Arctic Fuse 3 vuelve a pedir todas las filas cada vez que se entra en una sección y Kodi ejecuta los addons de Python de uno en uno: pedírselas cada vez a Palantir hacía esperar más de un minuto. En el primer minuto tras encender sigue yendo algo más lento (arrancan a la vez los servicios de otros addons). |
 | Un partido sale con un fondo que no le toca | BlackGhost no trae imágenes: el asistente pone las de TheSportsDB. Si el partido nombra su competición (Liga de Naciones, Champions, LaLiga, NBA…), la de la competición; si no, la del deporte (tenis, baloncesto, motor…), y si no se sabe, la de fútbol. Las de las competiciones se descargan poco a poco (su clave gratuita deja muy pocas consultas) y se guardan una semana. |
 | Deportes vacío o con error | Seguramente ha caducado el código de BlackGhost (va dentro de las rutas de Deportes). Pon el nuevo en **Asistente → Claves** (o en sus ajustes, «Código de BlackGhost»): el asistente se lo pasa a BlackGhost, vuelve a buscar las filas y rehace el menú solo. |
-| La lupa no encuentra una película o serie | Palantir avisa «No se han encontrado resultados» y, al aceptar, se vuelve a la pantalla de antes. Busca dentro del título que enseña Palantir (en español y, a veces, el original entre paréntesis): prueba con una sola palabra del título. |
-| Al volver con Atrás desde una serie sale otra vez el teclado de Palantir | Pasa si se pulsa Atrás nada más entrar en la serie. Es un fallo de Palantir: también pasa buscando desde el propio Palantir. El teclado ya trae lo último que buscaste: pulsa **OK** y vuelven los resultados. |
+| La lupa no encuentra una película o serie | Sale «Sin resultados». Busca dentro del título que enseña Palantir (en español y, a veces, el original entre paréntesis), sin mirar acentos ni mayúsculas, y a partir de 2 letras: prueba con una sola palabra del título. Encuentra lo mismo que «Buscar: Por título» de Palantir, pero sin abrirlo: tarda unos 3 segundos en vez de más de 20. |
 | El menú no ha cambiado | Reinicia Kodi. El servicio termina de montarlo al volver al Inicio. |
 | Falta una sección | Asistente → **Actualizar menús**. Si el addon no está instalado, su sección se oculta. |

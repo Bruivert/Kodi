@@ -120,3 +120,12 @@ El usuario quiere **la misma función** que ahora: buscar por título las pelíc
 - El orden fino de los resultados.
 - El límite de 60.
 - Cómo se detecta que la base de Palantir ha cambiado.
+
+## Cambios tras medir en la caja (implementación)
+
+- **Una sola fuente**, «Películas y series» (`?buscar=todo`), en vez de dos. Cada fuente es una llamada al asistente, y arrancarlo cuesta 0,7–1,5 s mientras que la búsqueda tarda 0,03–0,07 s. La pantalla de AF3 reparte igual los resultados en las filas «Películas» y «Series».
+- **El índice lo prepara el servicio** (`IndexKeeper`, a los 60 s de arrancar y cada 10 min si cambia la base). La primera búsqueda tras instalar tardaba 8 s porque las dos filas lo creaban a la vez.
+- **Tiempos finales** (18/11/2026), de aceptar el teclado hasta ver las filas: 3,2–3,8 s.
+  - El asistente busca en 0,1–0,4 s; el resto es el arranque de Python de Kodi y skinvariables.
+  - Con las letras de la pantalla, la fila sale ~1,2 s después de la última letra.
+
