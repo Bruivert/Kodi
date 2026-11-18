@@ -25,10 +25,24 @@ _ROWS_GROUP = re.compile(r'^([ \t]*)<control type="group" id="500">\n([ \t]*)', 
 _OUR_LINES = re.compile(r'^[ \t]*<animation [^\n]*<!-- %s -->\n' % re.escape(MARK), re.M)
 
 
-# Arctic Fuse 3: la lupa del menú abre la búsqueda de TMDb (no se puede reproducir); con esto busca en Palantir.
+# Arctic Fuse 3: la 1.0.12 cambió la acción de la lupa por la búsqueda del asistente. Desde la 1.0.13 la lupa vuelve a
+# abrir la búsqueda de AF3, con Películas y Series del catálogo de Palantir como fuentes (menus.SEARCH_WIDGETS): esto
+# deshace aquel cambio en las cajas que lo tienen.
 AF3_HOME_FILE = '1080i/Includes_Home.xml'
-_SEARCH_ACTION = re.compile(r'<param name="action">RunScript\(script\.skinvariables,run_multisearch[^<]*</param>')
-SEARCH_ACTION = '<param name="action">RunScript(%s,buscar)</param>' % MARK
+OUR_SEARCH_ACTION = '<param name="action">RunScript(%s,buscar)</param>' % MARK
+AF3_SEARCH_ACTION = ('<param name="action">RunScript(script.skinvariables,run_multisearch,tmdbhelper_container,'
+                     'progress_dialog$VAR[Value_MultiSearch_Layout_Param]$VAR[Value_MultiSearch_Discover_Param])'
+                     '</param>')
+
+# Textos de la búsqueda que AF3 y skinvariables no traen en español: id → (msgid, msgstr), tal como van en el .po.
+AF3_STRINGS_FILE = 'language/resource.language.es_es/strings.po'
+AF3_STRINGS = {31850: ('Results', 'Resultados'), 31851: ('Sources', 'Fuentes'), 31852: ('Decade', 'Década'),
+               31861: ('No results', 'Sin resultados'), 31863: ('Search for', 'Busca'),
+               31864: ('movies, TV shows, people and more', 'películas y series'),
+               31865: ('Enter a search term to begin.', 'Escribe lo que quieres ver.')}
+SKINVARIABLES_STRINGS_FILE = 'resources/language/resource.language.es_es/strings.po'
+SKINVARIABLES_STRINGS = {32099: ('Decade', 'Década'), 32100: ('Any', 'Todos'),
+                         32104: ('Searching \\"{}\\"', 'Buscando «{}»')}
 
 
 # Arctic Fuse 3 se actualiza sola y deja el archivo de las filas como venía, y Kodi recarga la skin sin el fundido.
@@ -76,6 +90,29 @@ def patch_af3_rows(text):
 
 
 def patch_af3_search(text):
-    if len(_SEARCH_ACTION.findall(text)) != 1:
-        return None  # ya aplicado, u otra skin
-    return _SEARCH_ACTION.sub(SEARCH_ACTION, text)
+    if text.count(OUR_SEARCH_ACTION) != 1:
+        return None  # AF3 como viene, u otra skin
+    return text.replace(OUR_SEARCH_ACTION, AF3_SEARCH_ACTION)
+
+
+def add_strings(text, strings):
+    """Pone en un strings.po las traducciones que faltan (o tienen msgstr vacío); las que ya están no se tocan."""
+    new = text or ''
+    for sid in sorted(strings):
+        msgid, msgstr = strings[sid]
+        found = re.search(r'(msgctxt "#%d"\n(?:#[^\n]*\n)*msgid "(?:[^"\\]|\\.)*"\n)msgstr "((?:[^"\\]|\\.)*)"' % sid, new)
+        if found:
+            if not found.group(2):
+                new = new[:found.start()] + found.group(1) + 'msgstr "%s"' % msgstr + new[found.end():]
+        elif 'msgctxt "#%d"' % sid not in new:  # otro formato (msgid en varias líneas): mejor no duplicarlo
+            new = (new.rstrip('\n') + '\n\n' if new else '') + 'msgctxt "#%d"\nmsgid "%s"\nmsgstr "%s"\n' % (
+                sid, msgid, msgstr)
+    return None if new == (text or '') else new
+
+
+def patch_af3_strings(text):
+    return add_strings(text, AF3_STRINGS)
+
+
+def patch_skinvariables_strings(text):
+    return add_strings(text, SKINVARIABLES_STRINGS)

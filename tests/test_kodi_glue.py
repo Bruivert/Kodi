@@ -552,3 +552,9 @@ def test_palantir_db_prefers_the_addon_file_then_the_profile_copy(monkeypatch):
                               (set(), None)):  # Palantir sin instalar o sin su base
         monkeypatch.setattr(ks.xbmcvfs, 'exists', lambda p, s=present: p in s)
         assert ks.palantir_db() == expected
+
+
+def test_patches_cover_the_search_texts_of_af3_and_skinvariables():
+    targets = {(a, f) for a, f, _, _ in ks.PATCHES}
+    assert (ks.SKIN, pt.AF3_STRINGS_FILE) in targets
+    assert ('script.skinvariables', pt.SKINVARIABLES_STRINGS_FILE) in targets

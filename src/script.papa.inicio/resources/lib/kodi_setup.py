@@ -16,6 +16,7 @@ ADDON_ID = 'script.papa.inicio'
 TITLE = 'Kodi de Papá'
 SKIN = menus.SKIN
 YOUTUBE = 'plugin.video.youtube'
+SKINVARIABLES = 'script.skinvariables'
 TMDBH = 'plugin.video.themoviedb.helper'
 TMDBH_ES_ES = 20  # índice de es-ES en LANGUAGES de TMDb Helper
 PROFILE = 'special://profile/addon_data/%s/' % ADDON_ID
@@ -474,6 +475,8 @@ PATCHES = [
     (YOUTUBE, patches.YOUTUBE_FILE, patches.patch_youtube, patches.youtube_needs_patch),
     (SKIN, patches.AF3_FILE, patches.patch_af3_rows, lambda version: True),
     (SKIN, patches.AF3_HOME_FILE, patches.patch_af3_search, lambda version: True),
+    (SKIN, patches.AF3_STRINGS_FILE, patches.patch_af3_strings, lambda version: True),
+    (SKINVARIABLES, patches.SKINVARIABLES_STRINGS_FILE, patches.patch_skinvariables_strings, lambda version: True),
 ]
 
 

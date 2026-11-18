@@ -170,13 +170,23 @@ AF3_HOME = """    <include name="Home_ControlList_Item_MultiSearch">
 """
 
 
-def test_search_patch_makes_the_magnifier_search_in_palantir():
-    new = pt.patch_af3_search(AF3_HOME)
-    assert '<param name="action">RunScript(script.papa.inicio,buscar)</param>' in new
-    assert 'run_multisearch' not in new
-    assert new.count('\n') == AF3_HOME.count('\n')  # solo cambia esa línea
+PATCHED_HOME = AF3_HOME.replace(AF3_HOME.splitlines()[4].strip(),
+                                '<param name="action">RunScript(script.papa.inicio,buscar)</param>')
 
 
-def test_search_patch_is_applied_once_and_ignores_other_skins():
-    assert pt.patch_af3_search(pt.patch_af3_search(AF3_HOME)) is None
-    assert pt.patch_af3_search('<includes/>') is None
+def test_search_patch_gives_the_magnifier_back_to_af3():
+    assert pt.patch_af3_search(PATCHED_HOME) == AF3_HOME
+    assert pt.patch_af3_search(AF3_HOME) is None and pt.patch_af3_search('<includes/>') is None
+
+
+PO = 'msgctxt "#31016"\nmsgid "Sort by"\nmsgstr "Ordenar por"\n\nmsgctxt "#31851"\nmsgid "Sources"\nmsgstr ""\n'
+
+
+def test_missing_spanish_texts_are_added_once():
+    new = pt.patch_af3_strings(PO)
+    assert 'msgctxt "#31851"\nmsgid "Sources"\nmsgstr "Fuentes"' in new
+    assert 'msgctxt "#31865"\nmsgid "Enter a search term to begin."\nmsgstr "Escribe lo que quieres ver."' in new
+    assert new.count('msgctxt "#31851"') == 1 and 'msgstr "Ordenar por"' in new
+    assert pt.patch_af3_strings(new) is None
+    sv = pt.patch_skinvariables_strings('')
+    assert 'msgctxt "#32104"\nmsgid "Searching \\"{}\\""\nmsgstr "Buscando «{}»"' in sv and 'msgstr "Todos"' in sv
