@@ -247,4 +247,7 @@ Sustituye a la lupa de la 1.0.12 (sección anterior). Diseño completo en `2026-
 - **Por qué no le pide la búsqueda a Palantir:** Palantir tarda 4–4,5 s solo en arrancar, y las dos filas sumaban 23 s. El asistente lee su base directamente, en solo lectura (`catalogo.py`): un índice propio de títulos normalizados, que se rehace si la base cambia.
   - Las fichas son las de Palantir (`selectvideos_` / `listado_temporadaS`), así que al elegir una, Palantir hace lo de siempre.
 - Los textos de la búsqueda que faltaban en español se añaden con un parche a los `strings.po` de AF3 y de skinvariables.
+- **Capítulos con su foto:** Palantir pone la foto del capítulo (`still`) también como carátula, y AF3 solo usa la miniatura de un capítulo si es distinta de la carátula. Por eso pintaba el fondo de la serie, el mismo en todos los capítulos.
+  - Se parchea `1080i/script-skinvariables-images-includes.xml`: delante de cada una de esas reglas (106 en AF3 3.5.4) va otra que usa `Art(still)`, respetando la protección de spoilers.
+  - Pasaba con cualquier serie de Palantir, no solo desde la lupa.
 
