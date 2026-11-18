@@ -5,8 +5,10 @@ import sys
 import xbmc
 import xbmcgui
 
-from resources.lib import buscar
 from resources.lib import kodi_setup as ks
+
+SEARCH = ('RunScript(script.skinvariables,run_multisearch,tmdbhelper_container,progress_dialog,mediatype_lists,'
+          'no_all_list,no_discover)')
 
 
 def configurar_todo():
@@ -61,36 +63,6 @@ def claves():
     ks.notify('Claves guardadas')
 
 
-def buscar_en_palantir():
-    """La lupa del menú (parche a Arctic Fuse 3): busca como "Buscar: Por título" de Palantir."""
-    opciones = buscar.choices(ks.load_rutas())
-    if not opciones:
-        xbmcgui.Dialog().ok(ks.TITLE, 'No encuentro la búsqueda de Palantir. Abre el asistente y usa '
-                                      '«Actualizar menús».')
-        return
-    texto = (xbmcgui.Dialog().input('¿Qué quieres ver?') or '').strip()
-    if not texto:
-        return
-    idx = 0 if len(opciones) == 1 else xbmcgui.Dialog().select('¿Qué buscas?', [o[1] for o in opciones])
-    if idx < 0:
-        return
-    ruta = opciones[idx][2]
-    for orden in buscar.open_commands(ruta):
-        xbmc.executebuiltin(orden)
-    monitor = xbmc.Monitor()
-    if not buscar.autofill(lambda: xbmc.getCondVisibility('Window.IsActive(virtualkeyboard)'),
-                           lambda t: ks.rpc('Input.SendText', {'text': t, 'done': True}),
-                           monitor.waitForAbort, texto):
-        ks.log('buscar: Palantir no sacó su teclado')  # si falla, Kodi también se queda en "Archivos…"
-    final =buscar.wait_for(lambda: buscar.after_search(xbmc.getCondVisibility('Window.IsActive(videos)'),
-                                                        xbmc.getCondVisibility(buscar.BUSY),
-                                                        xbmc.getInfoLabel('Container.FolderPath'),
-                                                        xbmc.getInfoLabel('Container.NumItems'), ruta),
-                            monitor.waitForAbort, limit=buscar.RESULT_WAIT, step=0.5)
-    if final == 'empty':
-        xbmc.executebuiltin('Action(Back)')  # de "Archivos…" a la pantalla desde la que se buscó
-
-
 def main():
     while not xbmc.Monitor().abortRequested():
         trailers = 'Sí' if ks.setting('trailers_auto') != 'false' else 'No'
@@ -109,6 +81,7 @@ def main():
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'buscar':
-        buscar_en_palantir()
+        # La lupa de la 1.0.12, hasta que la skin se recarga sin aquel parche: la búsqueda de AF3 como la abre la lupa.
+        xbmc.executebuiltin(SEARCH)
     else:
         main()

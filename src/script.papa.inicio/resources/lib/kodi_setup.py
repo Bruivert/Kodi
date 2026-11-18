@@ -16,6 +16,7 @@ ADDON_ID = 'script.papa.inicio'
 TITLE = 'Kodi de Papá'
 SKIN = menus.SKIN
 YOUTUBE = 'plugin.video.youtube'
+SKINVARIABLES = 'script.skinvariables'
 TMDBH = 'plugin.video.themoviedb.helper'
 TMDBH_ES_ES = 20  # índice de es-ES en LANGUAGES de TMDb Helper
 PROFILE = 'special://profile/addon_data/%s/' % ADDON_ID
@@ -27,6 +28,10 @@ FILAS = PROFILE + 'filas/'  # copias de las filas de Palantir (filas.py)
 FILAS_INDEX = FILAS + 'indice.json'  # 1.0.10: índice común (leer y reescribir); ya no se usa
 FILA_KEY = re.compile(r'^[a-z]+\.[a-z0-9]+$')  # "peliculas.estrenos": nada de "../" desde la URL del plugin
 ARTE = PROFILE + 'arte_deportes.json'  # fanart de TheSportsDB para Deportes (arte_deportes.py)
+CATALOGO = PROFILE + 'catalogo.db'  # índice de títulos de Palantir para la lupa (catalogo.py)
+# La base de Palantir, donde la busca su propio código (MoriaDB): la del addon si existe, si no la descargada.
+PALANTIR_DB = ('special://home/addons/plugin.video.palantir3/moria.cm3',
+               'special://profile/addon_data/script.module/settings.xml')
 MENU_VERSION_FILE = PROFILE + 'menu_version'
 # Donde BlackGhost guarda el código con el que entra sin preguntarlo (lo lee aunque sea uno temporal, como "n17").
 BG_CODE_FILE = 'special://profile/addon_data/plugin.video.blackghost/codeservernew.txt'
@@ -259,6 +264,14 @@ def save_fila(key, entry):
     write_file(FILAS + key + '.meta', json.dumps({'path': entry['path'], 'time': entry['time']}))
 
 
+def palantir_db():
+    """Ruta de la base de Palantir, o None si no está (Palantir sin instalar o sin descargar)."""
+    for path in PALANTIR_DB:
+        if xbmcvfs.exists(path):
+            return xbmcvfs.translatePath(path)
+    return None
+
+
 def load_arte():
     return _load_json(ARTE, {})
 
@@ -462,6 +475,9 @@ PATCHES = [
     (YOUTUBE, patches.YOUTUBE_FILE, patches.patch_youtube, patches.youtube_needs_patch),
     (SKIN, patches.AF3_FILE, patches.patch_af3_rows, lambda version: True),
     (SKIN, patches.AF3_HOME_FILE, patches.patch_af3_search, lambda version: True),
+    (SKIN, patches.AF3_STRINGS_FILE, patches.patch_af3_strings, lambda version: True),
+    (SKIN, patches.AF3_IMAGES_FILE, patches.patch_af3_episode_thumbs, lambda version: True),
+    (SKINVARIABLES, patches.SKINVARIABLES_STRINGS_FILE, patches.patch_skinvariables_strings, lambda version: True),
 ]
 
 

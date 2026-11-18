@@ -543,3 +543,29 @@ def test_sports_art_is_saved_and_read_back(monkeypatch):
     assert ks.load_arte() == {}
     ks.save_arte({'sports': {'Soccer': 'https://x/s.jpg'}, 'sports_time': 1})
     assert ks.load_arte() == {'sports': {'Soccer': 'https://x/s.jpg'}, 'sports_time': 1}
+
+
+def test_palantir_db_prefers_the_addon_file_then_the_profile_copy(monkeypatch):
+    monkeypatch.setattr(ks.xbmcvfs, 'translatePath', lambda p: '/k/' + p.split('://', 1)[1])
+    for present, expected in (({ks.PALANTIR_DB[0], ks.PALANTIR_DB[1]}, '/k/home/addons/plugin.video.palantir3/moria.cm3'),
+                              ({ks.PALANTIR_DB[1]}, '/k/profile/addon_data/script.module/settings.xml'),
+                              (set(), None)):  # Palantir sin instalar o sin su base
+        monkeypatch.setattr(ks.xbmcvfs, 'exists', lambda p, s=present: p in s)
+        assert ks.palantir_db() == expected
+
+
+def test_patches_cover_the_search_texts_of_af3_and_skinvariables():
+    targets = {(a, f) for a, f, _, _ in ks.PATCHES}
+    assert (ks.SKIN, pt.AF3_STRINGS_FILE) in targets
+    assert ('script.skinvariables', pt.SKINVARIABLES_STRINGS_FILE) in targets
+
+
+def test_old_magnifier_action_opens_the_af3_search():
+    # Hasta que la skin se recarga sin el parche de la 1.0.12, la lupa sigue llamando al asistente con "buscar".
+    src = open(os.path.join(ADDON_DIR, 'default.py'), encoding='utf-8').read()
+    assert 'run_multisearch' in src and 'buscar_en_palantir' not in src
+    assert not os.path.exists(os.path.join(ADDON_DIR, 'resources', 'lib', 'buscar.py'))
+
+
+def test_patches_cover_the_episode_cards_of_af3():
+    assert (ks.SKIN, pt.AF3_IMAGES_FILE, pt.patch_af3_episode_thumbs) in [(a, f, p) for a, f, p, _ in ks.PATCHES]

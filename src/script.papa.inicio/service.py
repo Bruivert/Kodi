@@ -9,7 +9,7 @@ import xbmcgui
 import xbmcvfs
 
 from resources.lib import kodi_setup as ks
-from resources.lib import arte_deportes, filas, fondo, patches, trailers
+from resources.lib import arte_deportes, catalogo, filas, fondo, patches, trailers
 from resources.lib.trailer_service import LogWatch, TrailerAutoplay
 
 
@@ -169,8 +169,11 @@ def main():
     # Fondos de Deportes: de TheSportsDB, una petición por minuto como mucho (su clave gratuita deja muy pocas).
     arte = arte_deportes.Fetcher(ks.load_arte, ks.save_arte, http_get, lambda: xbmc.getCondVisibility(
         '!Window.IsActive(fullscreenvideo)'), time.time)
+    # Índice de títulos de Palantir para la lupa, listo antes de la primera búsqueda.
+    indice = catalogo.IndexKeeper(ks.palantir_db, xbmcvfs.translatePath(ks.CATALOGO), time.time)
     # En un hilo aparte: cada petición tarda segundos y aquí dejaba a los tráileres sin responder al mando.
-    worker = fondo.Worker([('fila pedida', refresher.tick), ('fondo de deportes pedido a TheSportsDB', arte.tick)],
+    worker = fondo.Worker([('fila pedida', refresher.tick), ('fondo de deportes pedido a TheSportsDB', arte.tick),
+                           ('lupa', indice.tick)],
                           monitor.waitForAbort, ks.log)
     worker.start()
     last_check = 0.0

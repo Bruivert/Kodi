@@ -231,3 +231,23 @@ La lupa del menú hace lo mismo que «Buscar: Por título» de Palantir: escribi
   - Series «pitt», películas «allen» y otra vez series «pitt»: cada vez sale su teclado y los resultados que tocan, unos 5 s hasta el teclado y 7-13 s hasta la lista.
   - Una búsqueda sin resultados vuelve al Inicio.
   - *Allen* (2026) se reproduce en 1080p y, al pararla, vuelve la lista sin teclado.
+
+
+## La lupa (1.0.13, 18/11/2026)
+
+Sustituye a la lupa de la 1.0.12 (sección anterior). Diseño completo en `2026-11-18-lupa-busqueda-skin-design.md`.
+
+- La lupa vuelve a abrir la búsqueda propia de Arctic Fuse 3. Su única fuente es la ruta del asistente `?buscar=todo` (`menus.SEARCH_WIDGETS`), y se desactivan las filas «Descubrir» de TMDb. AF3 ya pone una fila por tipo (Películas, Series); cada fuente más sería otro arranque del asistente (0,7–1,5 s en la caja).
+- El servicio tiene el índice listo (`catalogo.IndexKeeper`): la primera búsqueda tras instalar tardaba 8 s creándolo.
+- **Medido en la caja**: el asistente busca en 0,1–0,4 s. Desde aceptar el teclado hasta ver las filas pasan ~3–3,5 s:
+  - 0,6 s de espera de la skin;
+  - ~1 s de arranque del asistente;
+  - el resto lo pone skinvariables (procesa y guarda en su caché).
+  Escribiendo con las letras de la pantalla, la fila sale ~1 s después de la última letra.
+- **Por qué no le pide la búsqueda a Palantir:** Palantir tarda 4–4,5 s solo en arrancar, y las dos filas sumaban 23 s. El asistente lee su base directamente, en solo lectura (`catalogo.py`): un índice propio de títulos normalizados, que se rehace si la base cambia.
+  - Las fichas son las de Palantir (`selectvideos_` / `listado_temporadaS`), así que al elegir una, Palantir hace lo de siempre.
+- Los textos de la búsqueda que faltaban en español se añaden con un parche a los `strings.po` de AF3 y de skinvariables.
+- **Capítulos con su foto:** Palantir pone la foto del capítulo (`still`) también como carátula, y AF3 solo usa la miniatura de un capítulo si es distinta de la carátula. Por eso pintaba el fondo de la serie, el mismo en todos los capítulos.
+  - Se parchea `1080i/script-skinvariables-images-includes.xml`: delante de cada una de esas reglas (106 en AF3 3.5.4) va otra que usa `Art(still)`, respetando la protección de spoilers.
+  - Pasaba con cualquier serie de Palantir, no solo desde la lupa.
+
