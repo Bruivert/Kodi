@@ -97,7 +97,14 @@ def entry(path, files, now):
 
 
 def usable(cached, path):
-    return bool(cached and cached.get('path') == path and cached.get('items'))
+    return bool(cached and cached.get('path') == path)
+
+
+def keeps(files, key):
+    """Si la respuesta vale como copia. None es un fallo de red; una lista vacía solo vale en Deportes (la agenda puede
+    quedarse sin partidos, o el código de BlackGhost caducar: mejor vacía que los partidos de ayer). "Estrenos" vacía
+    es que Palantir ha fallado: se queda la copia anterior."""
+    return files is not None and (bool(files) or key.startswith('deportes.'))
 
 
 def next_to_refresh(rows, index, now):
@@ -138,7 +145,7 @@ class Refresher(object):
         if not key:
             return None
         files = self.fetch(rows[key])
-        if files:
+        if keeps(files, key):
             self.save(key, entry(rows[key], files, self.clock()))
         else:  # sin red o Palantir con problemas: se queda la copia anterior
             self.next_time = now + FAIL_WAIT

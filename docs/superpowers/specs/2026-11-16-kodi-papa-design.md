@@ -193,3 +193,15 @@ BlackGhost solo trae su icono (y de fondo su logo de neón). Las tarjetas de NSP
 - Las competiciones (lista `LEAGUES`) se piden por id con `lookupleague`: una por minuto, empezando 3 min tras arrancar.
 - Se guardan una semana en `arte_deportes.json`. Si contesta 429, espera una hora.
 - Solo se usan si el nombre devuelto coincide con el esperado. Comprobados a mano: 4480, 4481, 5071, 4490, 4335, 4400, 4483, 4496, 4429.
+
+
+## Arreglos de la auditoría (1.0.11, 18/11/2026)
+
+1. **Listas vacías.** `fetch_row` devuelve `None` si falla y `[]` si la lista está vacía.
+   - Una lista vacía vale como copia solo en Deportes (`filas.keeps`): la agenda puede quedarse sin partidos o el código de BlackGhost caducar, y es mejor vacía que con los partidos de ayer.
+   - En Palantir, «vacía» es que ha fallado, así que se queda la copia anterior.
+2. **Trabajo de fondo en un hilo aparte** (`fondo.Worker`): la renovación de filas y la descarga de fondos ya no bloquean el bucle de los tráileres.
+3. **Tráiler en idioma original:** en el mismo idioma, primero el de España. Si solo hay latino, suena ese: la preferencia es España, pero sin dejar la película sin tráiler.
+4. **`write_file` atómico** (archivo temporal + renombrar).
+   - Cada copia lleva su `.meta` en lugar de un `indice.json` común que había que leer y reescribir.
+   - `load_fila` solo acepta claves `grupo.clave`.

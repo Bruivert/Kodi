@@ -9,7 +9,7 @@ import xbmcgui
 import xbmcvfs
 
 from resources.lib import kodi_setup as ks
-from resources.lib import arte_deportes, filas, patches, trailers
+from resources.lib import arte_deportes, filas, fondo, patches, trailers
 from resources.lib.trailer_service import LogWatch, TrailerAutoplay
 
 
@@ -169,6 +169,10 @@ def main():
     # Fondos de Deportes: de TheSportsDB, una petición por minuto como mucho (su clave gratuita deja muy pocas).
     arte = arte_deportes.Fetcher(ks.load_arte, ks.save_arte, http_get, lambda: xbmc.getCondVisibility(
         '!Window.IsActive(fullscreenvideo)'), time.time)
+    # En un hilo aparte: cada petición tarda segundos y aquí dejaba a los tráileres sin responder al mando.
+    worker = fondo.Worker([('fila pedida', refresher.tick), ('fondo de deportes pedido a TheSportsDB', arte.tick)],
+                          monitor.waitForAbort, ks.log)
+    worker.start()
     last_check = 0.0
     fallos = 0  # cada intento recarga la skin: no insistir sin fin
     while not monitor.abortRequested():
@@ -191,23 +195,12 @@ def main():
         except Exception as exc:
             ks.log('arreglos: %s' % exc)
         try:
-            renewed = refresher.tick()
-            if renewed:
-                ks.log('fila %s pedida a Palantir' % renewed)
-        except Exception as exc:
-            ks.log('filas: %s' % exc)
-        try:
-            asked = arte.tick()
-            if asked:
-                ks.log('fondos de deportes: competición %s pedida a TheSportsDB' % asked)
-        except Exception as exc:
-            ks.log('fondos de deportes: %s' % exc)
-        try:
             autoplay.tick()
         except Exception as exc:  # un fallo de red o de un tráiler no debe tumbar el servicio
             ks.log('tráiler: %s' % exc)
         if monitor.waitForAbort(0.5):
             break
+    worker.join(10)
 
 
 if __name__ == '__main__':

@@ -206,12 +206,14 @@ def original_videos_url(kind, tmdb_id, original_language, api_key):
 
 def pick_original_trailer(videos, original_language):
     """Clave del mejor vídeo de TMDb en cualquier idioma: tráiler, si no teaser, si no clip; el idioma original
-    antes que el inglés."""
+    antes que el inglés y, en el mismo idioma, el de España (en una película mexicana, el latino solo si no hay otro:
+    mejor eso que quedarse sin tráiler)."""
     valid = [v for v in videos or [] if v.get('site') == 'YouTube' and v.get('key') and v.get('type') in ORIGINAL_TYPES]
     if not valid:
         return None
     return max(valid, key=lambda v: (-ORIGINAL_TYPES.index(v['type']), v.get('iso_639_1') == original_language,
-                                     bool(v.get('official')), v.get('size') or 0, v.get('published_at') or ''))['key']
+                                     v.get('iso_3166_1') == 'ES', bool(v.get('official')), v.get('size') or 0,
+                                     v.get('published_at') or ''))['key']
 
 
 def find_trailer(kind, tmdb_id, api_key, http_get, http_post):
