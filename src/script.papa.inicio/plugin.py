@@ -4,7 +4,7 @@
 plugin://script.papa.inicio/?lista=favoritos  los favoritos de Kodi con su fanart y ficha de TMDb
 plugin://script.papa.inicio/?run=<orden>      ejecuta la orden de un favorito que no es carpeta ni vídeo
 plugin://script.papa.inicio/?fila=<lista>     una fila de Palantir desde su copia (filas.py)
-plugin://script.papa.inicio/?buscar=<peliculas|series>&q=<texto>  una fila de la lupa (catalogo.py)
+plugin://script.papa.inicio/?buscar=<todo|peliculas|series>&q=<texto>  resultados de la lupa (catalogo.py)
 """
 import json
 import sys
