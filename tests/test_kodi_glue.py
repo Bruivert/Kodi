@@ -543,3 +543,12 @@ def test_sports_art_is_saved_and_read_back(monkeypatch):
     assert ks.load_arte() == {}
     ks.save_arte({'sports': {'Soccer': 'https://x/s.jpg'}, 'sports_time': 1})
     assert ks.load_arte() == {'sports': {'Soccer': 'https://x/s.jpg'}, 'sports_time': 1}
+
+
+def test_palantir_db_prefers_the_addon_file_then_the_profile_copy(monkeypatch):
+    monkeypatch.setattr(ks.xbmcvfs, 'translatePath', lambda p: '/k/' + p.split('://', 1)[1])
+    for present, expected in (({ks.PALANTIR_DB[0], ks.PALANTIR_DB[1]}, '/k/home/addons/plugin.video.palantir3/moria.cm3'),
+                              ({ks.PALANTIR_DB[1]}, '/k/profile/addon_data/script.module/settings.xml'),
+                              (set(), None)):  # Palantir sin instalar o sin su base
+        monkeypatch.setattr(ks.xbmcvfs, 'exists', lambda p, s=present: p in s)
+        assert ks.palantir_db() == expected

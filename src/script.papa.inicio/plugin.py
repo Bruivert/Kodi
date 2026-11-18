@@ -4,6 +4,7 @@
 plugin://script.papa.inicio/?lista=favoritos  los favoritos de Kodi con su fanart y ficha de TMDb
 plugin://script.papa.inicio/?run=<orden>      ejecuta la orden de un favorito que no es carpeta ni vídeo
 plugin://script.papa.inicio/?fila=<lista>     una fila de Palantir desde su copia (filas.py)
+plugin://script.papa.inicio/?buscar=<peliculas|series>&q=<texto>  una fila de la lupa (catalogo.py)
 """
 import json
 import sys
@@ -14,8 +15,10 @@ from urllib.request import Request, urlopen
 import xbmc
 import xbmcgui
 import xbmcplugin
+import xbmcvfs
 
 from resources.lib import arte_deportes
+from resources.lib import catalogo
 from resources.lib import favoritos as fv
 from resources.lib import filas
 from resources.lib import kodi_setup as ks
@@ -128,6 +131,17 @@ def listar_fila(handle, key):
     xbmcplugin.endOfDirectory(handle, cacheToDisc=False)
 
 
+def listar_busqueda(handle, kind, text):
+    """Una fila de la búsqueda de la skin, sacada del catálogo de Palantir sin arrancarlo."""
+    start = time.time()
+    items = catalogo.find(ks.palantir_db(), xbmcvfs.translatePath(ks.CATALOGO), kind, text)
+    for item in items:
+        xbmcplugin.addDirectoryItem(handle, item['path'], _fila_item(item), isFolder=item['folder'])
+    xbmcplugin.setContent(handle, filas.content(items))
+    xbmcplugin.endOfDirectory(handle, cacheToDisc=False)
+    ks.log('buscar %s %r: %d en %.2fs' % (kind, text, len(items), time.time() - start))
+
+
 def main(argv):
     handle = int(argv[1]) if len(argv) > 1 and argv[1].lstrip('-').isdigit() else -1
     params = {k: v[0] for k, v in parse_qs((argv[2] if len(argv) > 2 else '').lstrip('?')).items()}
@@ -135,6 +149,8 @@ def main(argv):
         xbmc.executebuiltin(params['run'])
     elif params.get('lista') == 'favoritos':
         listar_favoritos(handle)
+    elif params.get('buscar'):
+        listar_busqueda(handle, params['buscar'], params.get('q', ''))
     elif params.get('fila'):
         listar_fila(handle, params['fila'])
     elif handle >= 0:

@@ -27,6 +27,10 @@ FILAS = PROFILE + 'filas/'  # copias de las filas de Palantir (filas.py)
 FILAS_INDEX = FILAS + 'indice.json'  # 1.0.10: índice común (leer y reescribir); ya no se usa
 FILA_KEY = re.compile(r'^[a-z]+\.[a-z0-9]+$')  # "peliculas.estrenos": nada de "../" desde la URL del plugin
 ARTE = PROFILE + 'arte_deportes.json'  # fanart de TheSportsDB para Deportes (arte_deportes.py)
+CATALOGO = PROFILE + 'catalogo.db'  # índice de títulos de Palantir para la lupa (catalogo.py)
+# La base de Palantir, donde la busca su propio código (MoriaDB): la del addon si existe, si no la descargada.
+PALANTIR_DB = ('special://home/addons/plugin.video.palantir3/moria.cm3',
+               'special://profile/addon_data/script.module/settings.xml')
 MENU_VERSION_FILE = PROFILE + 'menu_version'
 # Donde BlackGhost guarda el código con el que entra sin preguntarlo (lo lee aunque sea uno temporal, como "n17").
 BG_CODE_FILE = 'special://profile/addon_data/plugin.video.blackghost/codeservernew.txt'
@@ -257,6 +261,14 @@ def load_fila_index():
 def save_fila(key, entry):
     write_file(FILAS + key + '.json', json.dumps(entry, ensure_ascii=False))
     write_file(FILAS + key + '.meta', json.dumps({'path': entry['path'], 'time': entry['time']}))
+
+
+def palantir_db():
+    """Ruta de la base de Palantir, o None si no está (Palantir sin instalar o sin descargar)."""
+    for path in PALANTIR_DB:
+        if xbmcvfs.exists(path):
+            return xbmcvfs.translatePath(path)
+    return None
 
 
 def load_arte():
