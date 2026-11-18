@@ -190,3 +190,36 @@ def test_missing_spanish_texts_are_added_once():
     assert pt.patch_af3_strings(new) is None
     sv = pt.patch_skinvariables_strings('')
     assert 'msgctxt "#32104"\nmsgid "Searching \\"{}\\""\nmsgstr "Buscando «{}»"' in sv and 'msgstr "Todos"' in sv
+
+
+# Arctic Fuse 3 3.5.4, 1080i/script-skinvariables-images-includes.xml (recortado): la imagen de las tarjetas.
+_EP = ('<value condition="[String.IsEqual({li}.DBType,episode) | String.IsEqual({li}.DBType,video) | '
+       'String.IsEqual({li}.DBType,musicvideo)] + !String.IsEmpty({li}.Art(thumb)) + '
+       'String.IsEqual({li}.Icon,{li}.Art(thumb)) + !String.IsEqual({li}.Art(thumb),{li}.Art(poster))">'
+       '$INFO[{li}.Art(thumb)]</value>')
+IMAGES = '''<includes>
+    <variable name="Image_Landscape">
+        <value condition="String.IsEqual(ListItem.Property(tmdb_type),person)" />
+        %s
+        <value condition="!String.IsEmpty(ListItem.Art(fanart))">$INFO[ListItem.Art(fanart)]</value>
+    </variable>
+    <variable name="Image_Landscape_LIA_C450_0">
+        %s
+        <value condition="!String.IsEmpty(Container(450).ListItemAbsolute(0).Art(fanart))">$INFO[Container(450).ListItemAbsolute(0).Art(fanart)]</value>
+    </variable>
+</includes>
+''' % (_EP.format(li='ListItem'), _EP.format(li='Container(450).ListItemAbsolute(0)'))
+
+
+def test_episode_cards_show_their_own_still_instead_of_the_show_fanart():
+    # Palantir pone la foto del capítulo también como carátula y AF3, al verlas iguales, pinta el fondo de la serie
+    # en todos los capítulos. Con la foto propia (still) delante, cada capítulo sale con la suya.
+    new = pt.patch_af3_episode_thumbs(IMAGES)
+    for li in ('ListItem', 'Container(450).ListItemAbsolute(0)'):
+        still = ('<value condition="String.IsEqual({li}.DBType,episode) + !String.IsEmpty({li}.Art(still)) + '
+                 '!String.IsEqual({li}.Icon,OverlaySpoiler.png)">$INFO[{li}.Art(still)]</value>').format(li=li)
+        assert new.count(still) == 1
+        assert new.index(still) < new.index(_EP.format(li=li))  # antes de la regla de AF3
+    assert new.replace('\n', '').count('<value') == IMAGES.replace('\n', '').count('<value') + 2
+    assert pt.patch_af3_episode_thumbs(new) is None  # una sola vez
+    assert pt.patch_af3_episode_thumbs('<includes/>') is None

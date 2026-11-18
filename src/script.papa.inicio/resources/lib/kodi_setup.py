@@ -476,6 +476,7 @@ PATCHES = [
     (SKIN, patches.AF3_FILE, patches.patch_af3_rows, lambda version: True),
     (SKIN, patches.AF3_HOME_FILE, patches.patch_af3_search, lambda version: True),
     (SKIN, patches.AF3_STRINGS_FILE, patches.patch_af3_strings, lambda version: True),
+    (SKIN, patches.AF3_IMAGES_FILE, patches.patch_af3_episode_thumbs, lambda version: True),
     (SKINVARIABLES, patches.SKINVARIABLES_STRINGS_FILE, patches.patch_skinvariables_strings, lambda version: True),
 ]
 

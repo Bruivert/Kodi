@@ -565,3 +565,7 @@ def test_old_magnifier_action_opens_the_af3_search():
     src = open(os.path.join(ADDON_DIR, 'default.py'), encoding='utf-8').read()
     assert 'run_multisearch' in src and 'buscar_en_palantir' not in src
     assert not os.path.exists(os.path.join(ADDON_DIR, 'resources', 'lib', 'buscar.py'))
+
+
+def test_patches_cover_the_episode_cards_of_af3():
+    assert (ks.SKIN, pt.AF3_IMAGES_FILE, pt.patch_af3_episode_thumbs) in [(a, f, p) for a, f, p, _ in ks.PATCHES]

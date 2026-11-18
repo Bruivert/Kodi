@@ -45,6 +45,17 @@ SKINVARIABLES_STRINGS = {32099: ('Decade', 'Década'), 32100: ('Any', 'Todos'),
                          32104: ('Searching \\"{}\\"', 'Buscando «{}»')}
 
 
+# Arctic Fuse 3: en las tarjetas de un capítulo usa su miniatura solo si es distinta de la carátula. Palantir pone la
+# foto del capítulo (still) en las dos y AF3 pintaba el fondo de la serie, el mismo en todos los capítulos. Delante de
+# cada una de esas reglas (106 en 3.5.4, una por lista y contenedor) va otra que usa la foto del capítulo.
+AF3_IMAGES_FILE = '1080i/script-skinvariables-images-includes.xml'
+_EPISODE_THUMB = re.compile(r'^([ \t]*)(<value condition="\[String\.IsEqual\((?P<li>.+?)\.DBType,episode\) \| '
+                            r'String\.IsEqual\((?P=li)\.DBType,video\)[^\n]*?">\$INFO\[(?P=li)\.Art\(thumb\)\]</value>)',
+                            re.M)
+STILL_RULE = ('<value condition="String.IsEqual({li}.DBType,episode) + !String.IsEmpty({li}.Art(still)) + '
+              '!String.IsEqual({li}.Icon,OverlaySpoiler.png)">$INFO[{li}.Art(still)]</value>')  # sin destripar
+_OUR_STILL = re.compile(r'\.Art\(still\)\) \+ !String\.IsEqual\([^"]*?\.Icon,OverlaySpoiler\.png\)">')
+
 # Arctic Fuse 3 se actualiza sola y deja el archivo de las filas como venía, y Kodi recarga la skin sin el fundido.
 # El servicio lo vuelve a arreglar cada poco y recarga la skin cuando nadie está usando Kodi.
 CHECK_EVERY = 10 * 60.0
@@ -116,3 +127,11 @@ def patch_af3_strings(text):
 
 def patch_skinvariables_strings(text):
     return add_strings(text, SKINVARIABLES_STRINGS)
+
+
+def patch_af3_episode_thumbs(text):
+    if _OUR_STILL.search(text):
+        return None  # ya aplicado
+    new, count = _EPISODE_THUMB.subn(
+        lambda m: '%s%s\n%s%s' % (m.group(1), STILL_RULE.format(li=m.group('li')), m.group(1), m.group(2)), text)
+    return new if count else None
