@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="script.papa.inicio" name="Kodi de Papá — Asistente" version="1.0.11" provider-name="Bruivert">
+<addon id="script.papa.inicio" name="Kodi de Papá — Asistente" version="1.0.12" provider-name="Bruivert">
     <requires>
         <import addon="xbmc.python" version="3.0.1"/>
         <import addon="script.module.requests" version="2.22.0"/>

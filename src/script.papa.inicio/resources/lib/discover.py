@@ -46,6 +46,9 @@ PALANTIR_ROOT = {
 TRAKT_ONLY = ['mas vistas', 'recomendad', 'seguimiento', 'trakt']
 
 
+BUSCAR_POR_TITULO = [r'^por titulo']
+
+
 def needs_trakt(label):
     return matches(label, TRAKT_ONLY)
 
@@ -176,10 +179,16 @@ def discover_palantir(list_dir, find_addon, ask):
     top = classify(entries, PALANTIR_ROOT, used)
     _ask_missing(top, ['peliculas', 'series'], PALANTIR_ROOT, entries, used, ask, 'Palantir')
     result = {'id': addon, 'peliculas': {}, 'series': {}}
-    if 'peliculas' in top:
-        result['peliculas'] = classify(list_dir(top['peliculas']['path']), PELICULAS)
-    if 'series' in top:
-        result['series'] = classify(list_dir(top['series']['path']), SERIES)
+    search = {}
+    for key, catalog in (('peliculas', PELICULAS), ('series', SERIES)):
+        if key in top:
+            entries = list_dir(top[key]['path'])
+            result[key] = classify(entries, catalog)
+            by_title = find_first(entries, BUSCAR_POR_TITULO)  # para la lupa (buscar.py); no es una fila
+            if by_title:
+                search[key] = by_title['path']
+    if search:
+        result['buscar'] = search
     return result
 
 

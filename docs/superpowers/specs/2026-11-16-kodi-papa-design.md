@@ -205,3 +205,29 @@ BlackGhost solo trae su icono (y de fondo su logo de neón). Las tarjetas de NSP
 4. **`write_file` atómico** (archivo temporal + renombrar).
    - Cada copia lleva su `.meta` en lugar de un `indice.json` común que había que leer y reescribir.
    - `load_fila` solo acepta claves `grupo.clave`.
+
+
+## La lupa busca en Palantir (1.0.12, 18/11/2026)
+
+La lupa del menú hace lo mismo que «Buscar: Por título» de Palantir: escribir el título, elegir **Películas** o **Series**, y sale la lista de Palantir para elegir y ver.
+
+- **Parche a Arctic Fuse 3** (`patches.patch_af3_search`, en `1080i/Includes_Home.xml`): la acción de la lupa (`RunScript(script.skinvariables,run_multisearch…)`) pasa a ser `RunScript(script.papa.inicio,buscar)`. Se reaplica con el resto de parches si AF3 se actualiza.
+- **Rutas**: al recorrer Palantir se guarda la entrada «Por título» de Películas y de Series en `rutas['palantir']['buscar']` (`MENU_VERSION` 9). No es una fila.
+- **Flujo** (`default.buscar_en_palantir`, lo puro en `buscar.py`):
+  1. Nuestro teclado («¿Qué quieres ver?») y, si Palantir tiene las dos, «Películas / Series».
+  2. `ClearProperty(p3_play,10000)` y `ActivateWindow(videos,"<Por título>",return)`.
+  3. Cuando sale el teclado de Palantir, se le escribe el texto con `Input.SendText` (y se acepta).
+  4. Si no hay resultados, Palantir lo avisa y Kodi se queda en su biblioteca de vídeo («Archivos, Listas de reproducción…»). Al cerrar el aviso, el asistente pulsa Atrás y se vuelve a la pantalla desde la que se buscó.
+- **Por qué no se le pasa el texto en la ruta**: la búsqueda de Palantir pide el texto con su propio teclado. Por JSON-RPC (`Files.GetDirectory`) devuelve error.
+- **La marca `p3_play`** (leído en el código de Palantir, `libs/ioOOo000OOO.py`, `buscar3`):
+  - Cuando una búsqueda da resultados, Palantir pone `p3_play` en la ventana de Inicio y guarda la búsqueda en `p3_item_buscar`. Así, al volver a esa lista (Atrás desde una serie, o al acabar de ver algo), la repite sin preguntar.
+  - Solo la quita al listar uno de sus menús.
+  - Abierta directamente, repetía la última búsqueda aunque fuera de películas y ahora se pidieran series. Por eso se quita antes de abrirla.
+- **Descartado**:
+  - Entrar por su menú (Películas o Series) y desde ahí a «Por título», como una persona: funciona, pero tarda unos 5 s más y Atrás pasa por el menú de Palantir.
+  - Su «Buscar por título» general (`rebuscar`): tarda unos 23 s y agrupa los resultados en carpetas («Películas (9)», «Series (1)»…).
+- **Fallo conocido de Palantir**: si se pulsa Atrás nada más entrar en una serie, Kodi ejecuta la búsqueda dos veces seguidas. La primera gasta la marca y la segunda saca el teclado, con lo último buscado ya escrito. Pasa igual buscando desde el propio Palantir.
+- **Comprobado en la caja**:
+  - Series «pitt», películas «allen» y otra vez series «pitt»: cada vez sale su teclado y los resultados que tocan, unos 5 s hasta el teclado y 7-13 s hasta la lista.
+  - Una búsqueda sin resultados vuelve al Inicio.
+  - *Allen* (2026) se reproduce en 1080p y, al pararla, vuelve la lista sin teclado.
