@@ -56,6 +56,26 @@ STILL_RULE = ('<value condition="String.IsEqual({li}.DBType,episode) + !String.I
               '!String.IsEqual({li}.Icon,OverlaySpoiler.png)">$INFO[{li}.Art(still)]</value>')  # sin destripar
 _OUR_STILL = re.compile(r'\.Art\(still\)\) \+ !String\.IsEqual\([^"]*?\.Icon,OverlaySpoiler\.png\)">')
 
+# Balandro: mínimo 1080p al reproducir películas (decisión del usuario, 23/11/2026). Balandro solo ordena los enlaces
+# por calidad; esto descarta los que no dicen 1080p/4K (calidad.HD), también los que no dicen nada. Los capítulos no se
+# tocan: las webs en castellano no dan su calidad y el asistente los filtra por tamaño (calidad.episode_hd).
+BALANDRO_FILE = 'platformcode/platformtools.py'
+_BALANDRO_SORT = '    itemlist = servertools.filter_and_sort_by_quality(itemlist)\n'
+BALANDRO_MIN = ("    itemlist = [it for it in itemlist if parent_item.contentType == 'episode' or "
+                "re.search(r'1080|2160|\\b4k\\b|uhd|full ?hd', it.quality or '', re.I)]  # %s: 1080p\n" % MARK)
+
+
+# Balandro 4.0.34: DonTorrent cambió su página de resultados (23/11/2026): los enlaces van con comillas dobles y la
+# lista acaba en </ul>, y la búsqueda de Balandro no encontraba nada. Se aceptan las dos formas.
+DONTORRENTS_FILE = 'channels/dontorrents.py'
+_DT_OLD = ("    bloque = scrapertools.find_single_match(data, '>Resultados<(.*?)</nav>')\n\n"
+           "    patron = \"<a href='(.*?)'.*?\"\n"
+           "    patron += 'class=\"text-decoration-none\">(.*?)</a>'\n")
+_DT_NEW = ("    bloque = scrapertools.find_single_match(data, '>Resultados<(.*?)(?:</nav>|</ul>)')  # %s\n\n"
+           "    patron = \"<a href=[\\\"'](.*?)[\\\"'][^>]*?\"\n"
+           "    patron += 'class=\"[^\"]*text-decoration-none\">(.*?)</a>'\n" % MARK)
+
+
 # Arctic Fuse 3 se actualiza sola y deja el archivo de las filas como venía, y Kodi recarga la skin sin el fundido.
 # El servicio lo vuelve a arreglar cada poco y recarga la skin cuando nadie está usando Kodi.
 CHECK_EVERY = 10 * 60.0
@@ -135,3 +155,32 @@ def patch_af3_episode_thumbs(text):
     new, count = _EPISODE_THUMB.subn(
         lambda m: '%s%s\n%s%s' % (m.group(1), STILL_RULE.format(li=m.group('li')), m.group(1), m.group(2)), text)
     return new if count else None
+
+
+def patch_balandro_quality(text):
+    if BALANDRO_MIN in text or text.count(_BALANDRO_SORT) != 1:
+        return None  # ya aplicado, u otra versión de Balandro
+    return text.replace(_BALANDRO_SORT, _BALANDRO_SORT + BALANDRO_MIN)
+
+
+def patch_dontorrents_search(text):
+    if text.count(_DT_OLD) != 1:
+        return None  # ya aplicado, u otra versión
+    return text.replace(_DT_OLD, _DT_NEW)
+
+
+# --- plugin.video.telegram: el tema del foro de cada vídeo (permiso del usuario, 24/11/2026) -------------------
+# Su API (api/media) no dice de qué tema (Películas, Series, Chat…) es cada mensaje; el asistente lo necesita para
+# la actualización nocturna del catálogo (telegram.py). Se añade el campo «topic» (0 si no es de un tema).
+TELEGRAM_FILE = 'resources/lib/tgkodi/server.py'
+_TG_OLD = '        "ext": ".jpg",\n    }\n'
+_TG_NEW = ('        "ext": ".jpg",\n'
+           '        "topic": ((m.reply_to.reply_to_top_id or m.reply_to.reply_to_msg_id)  # papa: tema del foro\n'
+           '                  if getattr(m.reply_to, "forum_topic", False) else 0),\n'
+           '    }\n')
+
+
+def patch_telegram_topic(text):
+    if text.count(_TG_OLD) != 1 or 'papa: tema del foro' in text:
+        return None  # ya aplicado, u otra versión
+    return text.replace(_TG_OLD, _TG_NEW)

@@ -223,3 +223,57 @@ def test_episode_cards_show_their_own_still_instead_of_the_show_fanart():
     assert new.replace('\n', '').count('<value') == IMAGES.replace('\n', '').count('<value') + 2
     assert pt.patch_af3_episode_thumbs(new) is None  # una sola vez
     assert pt.patch_af3_episode_thumbs('<includes/>') is None
+
+
+BALANDRO_PLAY = ('def play_from_itemlist(itemlist, parent_item):\n'
+                 '    from core import servertools\n\n'
+                 '    itemlist = servertools.filter_and_sort_by_quality(itemlist)\n'
+                 '    itemlist = servertools.filter_and_sort_by_server(itemlist)\n')
+
+
+def test_balandro_plays_only_1080p_movies_and_leaves_episodes_to_the_assistant():
+    import re
+    new = pt.patch_balandro_quality(BALANDRO_PLAY)
+    assert new and pt.patch_balandro_quality(new) is None and pt.patch_balandro_quality('otra versión') is None
+
+    class It(object):
+        def __init__(self, quality, kind='movie'):
+            self.quality, self.contentType = quality, kind
+
+    env = {'re': re}
+    exec(compile(new.replace('    from core import servertools\n', '').replace(
+        'servertools.filter_and_sort_by_quality(itemlist)', 'itemlist').replace(
+        '    itemlist = servertools.filter_and_sort_by_server(itemlist)\n', '    return itemlist\n'), 'p', 'exec'), env)
+    links = [It('720p'), It('1080p'), It(''), It('4K'), It(None)]
+    assert [i.quality for i in env['play_from_itemlist'](links, It('', 'movie'))] == ['1080p', '4K']
+    assert len(env['play_from_itemlist'](links, It('', 'episode'))) == 5
+
+
+DT_SEARCH = ("    data = do_downloadpage(item.url, post = post, headers = headers)\n\n"
+             "    bloque = scrapertools.find_single_match(data, '>Resultados<(.*?)</nav>')\n\n"
+             "    patron = \"<a href='(.*?)'.*?\"\n"
+             "    patron += 'class=\"text-decoration-none\">(.*?)</a>'\n\n"
+             "    matches = re.compile(patron).findall(bloque)\n")
+
+
+def test_dontorrents_search_reads_the_new_results_page():
+    import re
+    new = pt.patch_dontorrents_search(DT_SEARCH)
+    assert new and pt.patch_dontorrents_search(new) is None
+    page = ('<h1>Resultados</h1><ul class="search-results"><li><a href="/serie/92796/92797/La-playlist-1-Temporada" '
+            'class="search-result-link text-decoration-none"><span class="text-secondary">La</span> playlist</a></li>'
+            '</ul>')
+    env = {'re': re, 'data': page, 'scrapertools': type('S', (), {'find_single_match': staticmethod(
+        lambda d, p: (re.search(p, d, re.S).group(1) if re.search(p, d, re.S) else ''))})}
+    exec(new.replace('    data = do_downloadpage(item.url, post = post, headers = headers)\n', '').replace(
+        '\n    ', '\n').lstrip(), env)
+    assert env['matches'] == [('/serie/92796/92797/La-playlist-1-Temporada',
+                               '<span class="text-secondary">La</span> playlist')]
+
+
+def test_telegram_topic_patch():
+    from resources.lib import patches as pt
+    text = 'x = {\n        "ext": ".jpg",\n    }\n    if kind == "video":\n'
+    new = pt.patch_telegram_topic(text)
+    assert '"topic": ((m.reply_to.reply_to_top_id or m.reply_to.reply_to_msg_id)' in new
+    assert pt.patch_telegram_topic(new) is None and pt.patch_telegram_topic('otra versión') is None

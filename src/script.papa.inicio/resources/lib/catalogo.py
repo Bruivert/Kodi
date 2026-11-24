@@ -2,8 +2,9 @@
 """El catálogo de Palantir para la búsqueda de la skin (la lupa).
 
 Pedirle la búsqueda a Palantir tarda: arranca en ~4,5 s cada vez (su código está ofuscado) y su consulta compara
-título a título en Python. Aquí se lee su base directamente (SQLite, solo lectura) y se montan las mismas fichas que
-pone en su lista: al elegir una, Palantir hace lo de siempre (enlaces y reproducción, o temporadas).
+título a título en Python. Aquí se lee su base directamente (SQLite, solo lectura). Palantir cerró (17/11/2026): la lupa
+busca ahora en TMDb (lupa.py) y este catálogo queda de reserva; al pulsar una ficha, el asistente la busca en Balandro
+y la reproduce (fichas.py).
 Puro: las rutas llegan de fuera.
 """
 import base64
@@ -11,6 +12,8 @@ import os
 import sqlite3
 import unicodedata
 from urllib import parse
+
+from resources.lib.fichas import play_url, serie_url
 
 PALANTIR = 'plugin://plugin.video.palantir3/?'
 IMAGES = 'https://image.tmdb.org/t/p/'
@@ -77,10 +80,85 @@ def _rating(value):
         return None
 
 
+def _title(row):
+    return (row.get('titulo') or '').replace('\\n', '').strip()
+
+
+def palantir_path(kind, row):
+    """La ficha de Palantir tal como la pone él en su lista: enlaces y reproducción, o temporadas. Es la reserva
+    cuando Balandro no tiene el título en 1080p y castellano (plugin.py), mientras los enlaces de Palantir sigan."""
+    title = _title(row)
+    fields = {'label': title, 'tmdb': str(row['tmdb']), 'fecha': row.get('fecha'), 'plot': row.get('plot'),
+              'poster': row.get('poster'), 'fanart': row.get('fondo'), 'clearlogo': row.get('clearlogo'),
+              'mpaa': row.get('mpaa') or '',  # Palantir mira si lleva "+18"
+              'rating': row.get('rating')}
+    if kind == 'peliculas':
+        fields.update(title=title, duration=row.get('duration'), action='selectvideos_', content='movies',
+                      isPlayable=True)
+    else:
+        fields.update(tvshowtitle=title, action='listado_temporadaS', content='tvshows', page=0)
+    return p3_url({k: v for k, v in fields.items() if v is not None})
+
+
+def palantir_row(db_path, kind, tmdb):
+    """La ficha del catálogo de Palantir si tiene enlaces, o None."""
+    if not db_path or kind not in KINDS or not str(tmdb).isdigit():
+        return None
+    try:
+        con = _read_only(db_path)
+        try:
+            linked = con.execute('SELECT 1 FROM %s WHERE tmdb = ? LIMIT 1' % KINDS[kind][1], (int(tmdb),)).fetchone()
+        finally:
+            con.close()
+        rows = details(db_path, kind, [int(tmdb)]) if linked else []
+    except sqlite3.Error:
+        return None
+    return rows[0] if rows else None
+
+
+def links(db_path, kind, tmdb, season=None, episode=None):
+    """Los enlaces del catálogo de una película o de un capítulo: [{link, calidad, audio}] ([] si no hay)."""
+    if not db_path or kind not in KINDS or not str(tmdb).isdigit():
+        return []
+    sql = 'SELECT link, calidad, audio FROM %s WHERE tmdb = ?' % KINDS[kind][1]
+    args = [int(tmdb)]
+    if kind == 'series':
+        sql += ' AND temporada = ? AND episodio = ?'
+        args += [int(season or 1), int(episode or 1)]
+    try:
+        con = _read_only(db_path)
+        try:
+            return [{'link': l, 'calidad': c, 'audio': a} for l, c, a in con.execute(sql, args)]
+        finally:
+            con.close()
+    except (sqlite3.Error, ValueError):
+        return []
+
+
+def episodes(db_path, tmdb):
+    """{temporada: [capítulos]} de una serie del catálogo, por orden ({} si no está)."""
+    if not db_path or not str(tmdb).isdigit():
+        return {}
+    try:
+        con = _read_only(db_path)
+        try:
+            rows = con.execute('SELECT DISTINCT temporada, episodio FROM enlaces_series WHERE tmdb = ? '
+                               'ORDER BY temporada, episodio', (int(tmdb),)).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+    out = {}
+    for season, episode in rows:
+        out.setdefault(int(season), []).append(int(episode))
+    return out
+
+
 def to_item(kind, row):
-    """Elemento de la fila (forma de filas.to_item) para una película o serie de la base de Palantir."""
+    """Elemento de la fila (forma de filas.to_item) para una película o serie de la base de Palantir: la película se
+    reproduce al pulsarla y la serie abre sus temporadas, las dos por Balandro (fichas.py)."""
     movie = kind == 'peliculas'
-    title = (row.get('titulo') or '').replace('\\n', '').strip()
+    title = _title(row)
     fecha = row.get('fecha') or ''
     poster, fanart, logo = _image('w500', row.get('poster')), _image('w1280', row.get('fondo')), \
         _image('w500', row.get('clearlogo'))
@@ -98,17 +176,9 @@ def to_item(kind, row):
     if row.get('trailer'):
         info['trailer'] = YOUTUBE % row['trailer']
 
-    fields = {'label': title, 'tmdb': str(row['tmdb']), 'fecha': row.get('fecha'), 'plot': row.get('plot'),
-              'poster': row.get('poster'), 'fanart': row.get('fondo'), 'clearlogo': row.get('clearlogo'),
-              'mpaa': row.get('mpaa') or '',  # Palantir mira si lleva "+18"
-              'rating': row.get('rating')}
-    if movie:
-        fields.update(title=title, duration=row.get('duration'), action='selectvideos_', content='movies',
-                      isPlayable=True)
-    else:
-        fields.update(tvshowtitle=title, action='listado_temporadaS', content='tvshows', page=0)
-
-    return {'label': title, 'path': p3_url({k: v for k, v in fields.items() if v is not None}), 'folder': not movie,
+    year = fecha[:4] if fecha[:4].isdigit() else ''
+    path = play_url(kind, row['tmdb'], title, year) if movie else serie_url(row['tmdb'], title, year)
+    return {'label': title, 'path': path, 'folder': not movie,
             'art': {k: v for k, v in art.items() if v}, 'info': {k: v for k, v in info.items() if v not in (None, '')},
             'uniqueids': {'tmdb': str(row['tmdb'])}, 'properties': {'IsPlayable': 'true'} if movie else {}}
 

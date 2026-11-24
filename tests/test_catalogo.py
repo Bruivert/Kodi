@@ -20,14 +20,10 @@ MOVIE = {'tmdb': 785084, 'titulo': 'La ballena', 'fecha': '2022-12-09', 'plot': 
          'clearlogo': '/l.png', 'rating': '7.9/7.7'}
 
 
-def _fields(item):
-    return eval(cat.p3_decode(item['path'].split('?', 1)[1]))
-
-
-def test_movie_item_plays_through_palantir():
+def test_movie_item_plays_through_the_assistant():
     it = cat.to_item('peliculas', MOVIE)
-    assert it['label'] == 'La ballena' and it['folder'] is False
-    assert it['properties'] == {'IsPlayable': 'true'}
+    assert it['label'] == 'La ballena' and it['folder'] is False and it['properties'] == {'IsPlayable': 'true'}
+    assert it['path'] == 'plugin://script.papa.inicio/?play=peliculas&tmdb=785084&titulo=La+ballena&anio=2022'
     assert it['art'] == {'poster': 'https://image.tmdb.org/t/p/w500/p.jpg',
                          'thumb': 'https://image.tmdb.org/t/p/w500/p.jpg',
                          'fanart': 'https://image.tmdb.org/t/p/w1280/f.jpg',
@@ -36,18 +32,13 @@ def test_movie_item_plays_through_palantir():
                           'mpaa': '16', 'genre': ['Drama', 'Familia'], 'rating': 7.9, 'mediatype': 'movie',
                           'trailer': 'plugin://plugin.video.youtube/play/?video_id=Rhd5EyZ-rEs'}
     assert it['uniqueids'] == {'tmdb': '785084'}
-    fields = _fields(it)
-    assert fields['action'] == 'selectvideos_' and fields['content'] == 'movies' and fields['tmdb'] == '785084'
-    assert fields['isPlayable'] is True and fields['title'] == fields['label'] == 'La ballena'
 
 
-def test_series_item_opens_palantirs_seasons():
-    row = {k: v for k, v in MOVIE.items() if k != 'duration'}
-    it = cat.to_item('series', dict(row, titulo='The Pitt'))
-    fields = _fields(it)
+def test_series_item_opens_its_seasons_through_the_assistant():
+    row = dict({k: v for k, v in MOVIE.items() if k != 'duration'}, titulo='The Pitt')
+    it = cat.to_item('series', row)
     assert it['folder'] is True and it['properties'] == {} and it['info']['mediatype'] == 'tvshow'
-    assert fields['action'] == 'listado_temporadaS' and fields['content'] == 'tvshows'
-    assert fields['tvshowtitle'] == fields['label'] == 'The Pitt' and fields['page'] == 0
+    assert it['path'] == 'plugin://script.papa.inicio/?serie=785084&titulo=The+Pitt&anio=2022'
 
 
 def test_incomplete_rows_still_make_an_item():
@@ -56,7 +47,6 @@ def test_incomplete_rows_still_make_an_item():
     it = cat.to_item('peliculas', bare)
     assert it['art'] == {} and it['info'] == {'title': 'X', 'rating': 6.5, 'mediatype': 'movie'}
     assert cat.to_item('peliculas', dict(bare, rating=''))['info'] == {'title': 'X', 'mediatype': 'movie'}
-    assert None not in _fields(it).values()
 
 
 # --- Índice y búsqueda sobre una base con la forma de la de Palantir ---
@@ -179,3 +169,40 @@ def test_catalogo_does_not_import_uuid():
     # Cada búsqueda arranca el asistente de cero: en la caja cada importación cuenta (uuid, 0,04 s).
     src = open(cat.__file__, encoding='utf-8').read()
     assert 'import uuid' not in src
+
+
+def test_palantir_reserve_only_for_titles_with_links(palantir_db):
+    assert cat.palantir_row(palantir_db, 'peliculas', 1)['titulo'] == 'La ballena'
+    assert cat.palantir_row(palantir_db, 'peliculas', '3') is None  # sin enlaces
+    assert cat.palantir_row(palantir_db, 'series', 10)['titulo'] == 'The Pitt'
+    assert cat.palantir_row(palantir_db, 'peliculas', 999) is None and cat.palantir_row(None, 'series', 10) is None
+    assert cat.palantir_row(palantir_db, 'otra', 1) is None and cat.palantir_row(palantir_db, 'series', 'x') is None
+
+
+def test_palantir_paths_are_its_own_items():
+    movie = eval(cat.p3_decode(cat.palantir_path('peliculas', MOVIE).split('?', 1)[1]))
+    assert movie['action'] == 'selectvideos_' and movie['isPlayable'] is True and movie['tmdb'] == '785084'
+    show = eval(cat.p3_decode(cat.palantir_path('series', dict(MOVIE, titulo='The Pitt')).split('?', 1)[1]))
+    assert show['action'] == 'listado_temporadaS' and show['tvshowtitle'] == 'The Pitt' and show['page'] == 0
+
+
+def test_links_and_episodes_of_the_catalogue(tmp_path):
+    path = str(tmp_path / 'p.db')
+    con = sqlite3.connect(path)
+    con.execute('CREATE TABLE enlaces_pelis (link TEXT, tmdb INTEGER, calidad TEXT, audio TEXT, info TEXT)')
+    con.execute('CREATE TABLE enlaces_series (link TEXT, tmdb INTEGER, temporada INTEGER, episodio INTEGER, '
+                'calidad TEXT, audio TEXT, info TEXT)')
+    con.executemany('INSERT INTO enlaces_pelis VALUES (?,?,?,?,?)', [('L1', 7, '1080p', 'esp', ''),
+                                                                    ('L2', 7, '4K', 'eng,esp', ''),
+                                                                    ('L3', 8, 'SD', 'esp', '')])
+    con.executemany('INSERT INTO enlaces_series VALUES (?,?,?,?,?,?,?)', [
+        ('E12', 9, 1, 2, '1080p', 'esp', ''), ('E11', 9, 1, 1, '1080p', 'esp', ''), ('E11b', 9, 1, 1, 'SD', 'esp', ''),
+        ('E21', 9, 2, 1, '1080p', 'esp', '')])
+    con.commit()
+    con.close()
+    assert cat.links(path, 'peliculas', 7) == [{'link': 'L1', 'calidad': '1080p', 'audio': 'esp'},
+                                               {'link': 'L2', 'calidad': '4K', 'audio': 'eng,esp'}]
+    assert [l['link'] for l in cat.links(path, 'series', '9', 1, 1)] == ['E11', 'E11b']
+    assert cat.links(path, 'series', 9, 3, 1) == [] and cat.links(None, 'peliculas', 7) == []
+    assert cat.links(path, 'peliculas', 'x') == []
+    assert cat.episodes(path, 9) == {1: [1, 2], 2: [1]} and cat.episodes(path, 99) == {}

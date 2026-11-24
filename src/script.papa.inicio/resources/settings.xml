@@ -5,5 +5,6 @@
         <setting id="tmdb_key" type="text" label="Clave de TMDb v3 (tráileres)" default=""/>
         <setting id="omdb_key" type="text" label="Clave de OMDb (nota de IMDb)" default=""/>
         <setting id="bg_codigo" type="text" label="Código de BlackGhost (de su Telegram)" default=""/>
+        <setting id="pelis_url" type="text" label="Dirección de PeLiS (se pega en http://caja:8770)" default="" option="hidden"/>
     </category>
 </settings>

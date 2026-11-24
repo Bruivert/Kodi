@@ -33,8 +33,11 @@ def test_addon_xml_declares_script_and_service_for_omega():
     points = {e.get('point'): e.get('library') for e in root.iter('extension')}
     assert points['xbmc.python.script'] == 'default.py'
     assert points['xbmc.service'] == 'service.py'
-    imports = {i.get('addon'): i.get('version') for i in root.iter('import')}
-    assert imports == {'xbmc.python': '3.0.1', 'script.module.requests': '2.22.0'}
+    imports = {i.get('addon'): (i.get('version'), i.get('optional')) for i in root.iter('import')}
+    # ResolveURL, opcional: con cuenta de AllDebrid se ve por ella (plugin.py, debrid.py); sin ella, por Balandro.
+    # pyaes, opcional: descifra los enlaces del catálogo de Palantir (palantir.py).
+    assert imports == {'xbmc.python': ('3.0.1', None), 'script.module.requests': ('2.22.0', None),
+                       'script.module.resolveurl': (None, 'true'), 'script.module.pyaes': (None, 'true')}
 
 
 def test_settings_have_keys_and_trailer_switch():
@@ -74,6 +77,7 @@ CONDITIONS = {
     'String.IsEmpty(Window(Home).Property(ReloadDone))': lambda s: not s.get('reload_done'),
     'Window.IsVisible(startup)': lambda s: s.get('startup', False),
     'Skin.HasSetting(DefaultConfig.InitDone)': lambda s: s.get('initdone', False),
+    'System.HasAddon(plugin.video.balandro)': lambda s: s.get('balandro', True),
 }
 
 # Como estaba la caja: AF3 arrancada en el hub de TV (11107) y sin DefaultConfig.InitDone.
