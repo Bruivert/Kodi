@@ -560,10 +560,14 @@ def _telegram_link(tg):
 
 
 def reproducir(handle, p):
-    """?play=: por AllDebrid, lo primero que ya tenga listo de: Torrentio (fuente principal) y PeLiS (lo antiguo y
-    lo nuevo); si no, el grupo de Telegram (telegram.py, precargado desde el principio); si no, Balandro (la página
-    que trae la fila o lo que encuentre) y el catálogo de Palantir. Si nada está listo, le pide el mejor torrent por
-    detrás y avisa. Sin AllDebrid: Telegram, Balandro tal cual o la ficha del addon de Palantir."""
+    """?play=: por orden (medido el 25/11/2026):
+    1. lo que AllDebrid ya tenga en 1080p o más de Torrentio (2–4 s);
+    2. PeLiS (lo antiguo y lo nuevo, ya en AllDebrid): aunque tarde en contestar, arranca antes que Telegram, que
+       necesita 10–24 s más para abrir el vídeo (probado: esperar a PeLiS sale mejor que no esperarle);
+    3. el grupo de Telegram (precargado desde el principio); si es de menos de 1080p, AllDebrid prepara por detrás el
+       mejor torrent para la próxima vez;
+    4. Balandro y el catálogo de Palantir; si nada está listo, AllDebrid prepara el mejor torrent y avisa.
+    Sin AllDebrid: Telegram, Balandro tal cual o la ficha del addon de Palantir."""
     kind, tmdb, title, year = p.get('play'), p.get('tmdb', ''), p.get('titulo', ''), p.get('anio', '')
     season, episode = (int(p[k]) if p.get(k, '').isdigit() else None for k in ('t', 'e'))
     if kind == 'series':
@@ -572,29 +576,32 @@ def reproducir(handle, p):
     playing = {'kind': kind, 'tmdb': tmdb, 'title': title, 'year': year, 'season': season, 'episode': episode,
                'time': now}
     resolver = _alldebrid()
-    tg = _telegram(kind, tmdb, season, episode)  # el grupo de Telegram: va detrás, pero ya precargando
+    tg = _telegram(kind, tmdb, season, episode)  # el catálogo del grupo está en la caja: se sabe al momento
     if tg:
         _telegram_prefetch(tg)
 
+    def play(target, fuente):
+        art, info = _art_info(kind, tmdb, season, episode)
+        _play(handle, dict(playing, fuente=fuente), target, art, info)
+
+    tio = []
     if resolver:
         _imdb(kind, tmdb)  # una sola consulta a TMDb, que las dos búsquedas de abajo leen ya guardada
-        pool = ThreadPoolExecutor(1)  # PeLiS tarda ~6 s: se le pregunta a la vez que a Torrentio
+        pool = ThreadPoolExecutor(1)  # PeLiS tarda 6–11 s: se le pregunta a la vez que a Torrentio
         pending = pool.submit(_pelis, kind, tmdb, season, episode)
-        pool.shutdown(wait=False)  # si Torrentio ya tiene algo listo, no se espera a PeLiS
+        pool.shutdown(wait=False)  # no se espera a PeLiS si no hace falta
         tio = _torrentio(kind, tmdb, season, episode)
-        direct, fuente = _cached(resolver, [b['btih'] for b in tio][:TORRENTIO_TRIES], title), 'torrentio'
-        if not direct:  # PeLiS: lo antiguo y lo nuevo, ya preparado en AllDebrid
-            found = pending.result()
-            direct, fuente = (found[0]['url'], 'pelis') if found else (None, '')
+        direct = _cached(resolver, [b['btih'] for b in tio][:TORRENTIO_TRIES], title)
         if direct:
-            art, info = _art_info(kind, tmdb, season, episode)
-            _play(handle, dict(playing, fuente=fuente), direct, art, info)
-            return
-    direct = _telegram_link(tg) if tg else None  # lo que no tienen Torrentio/PeLiS: el grupo de Telegram
+            return play(direct, 'torrentio')
+        found = pending.result()
+        if found:
+            return play(found[0]['url'], 'pelis')
+    direct = _telegram_link(tg) if tg else None  # lo que no tienen Torrentio/PeLiS (o sin AllDebrid)
     if direct:
-        art, info = _art_info(kind, tmdb, season, episode)
-        _play(handle, dict(playing, fuente='telegram'), direct, art, info)
-        return
+        if resolver and tio and not telegram.has_hd(tg[2]):  # la próxima vez, en 1080p desde AllDebrid
+            _prepare(resolver, tio[0]['btih'], title)
+        return play(direct, 'telegram')
 
     intentos = _json(ks.INTENTOS, {})
     last = intentos.get(historial.key(playing))

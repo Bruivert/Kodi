@@ -25,6 +25,14 @@ MAX_PAGES = 25  # 5.000 vídeos por noche como mucho
 TRIES = 3  # versiones de un mismo título que se prueban si una no responde (borrada del grupo)
 
 
+HD = ('1080p', '4K')
+
+
+def has_hd(found):
+    """¿El grupo tiene el título en 1080p o más? (Si no, mientras suena se prepara en AllDebrid algo mejor.)"""
+    return any(v.get('quality') in HD for v in found or [])
+
+
 def base(token, port=PORT):
     return 'http://127.0.0.1:%d/t%s' % (port, token)
 

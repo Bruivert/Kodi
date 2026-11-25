@@ -107,3 +107,8 @@ def test_split_movies_play_as_one(tmp_path):
     assert tg.play_target(b, -100, v[0]) == 'stack://%s , %s' % (tg.stream_url(b, -100, 30), tg.stream_url(b, -100, 31))
     assert tg.play_target(b, -100, {'msg': 9}) == tg.stream_url(b, -100, 9)
     assert 'parts' not in tg.versions(path, 'peliculas', '99')[0]
+
+
+def test_hd_in_the_group_means_no_waiting_for_pelis():
+    assert tg.has_hd([{'quality': '720p'}, {'quality': '1080p'}]) and tg.has_hd([{'quality': '4K'}])
+    assert not tg.has_hd([{'quality': '?'}, {'quality': 'SD'}]) and not tg.has_hd([])
