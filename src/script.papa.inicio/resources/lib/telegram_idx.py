@@ -233,7 +233,8 @@ def match_movie(title, year, results, loose=False):
             continue  # «Viernes 13 parte 2» no es «Viernes 13, parte III»
         score = max(similar(title, n) for n in names)
         bare = lambda t: ' '.join(w for w in plain(t).split() if not w.isdigit() and w not in _ROMAN)  # noqa: E731
-        if len(plain(title)) < 8 and max(similar(bare(title), bare(n)) for n in names) < 0.9:
+        whole = loose and any(_starts(n, title) for n in names if n)  # «Ong Bak» → «Ong Bak: El guerrero Muay Thai»
+        if len(plain(title)) < 8 and not whole and max(similar(bare(title), bare(n)) for n in names) < 0.9:
             continue  # títulos cortos: «Amal» no es «Amalur» («Sissi 1» sí es «Sissi»)
         ryear = int((r.get('release_date') or '0000')[:4] or 0)
         if year:

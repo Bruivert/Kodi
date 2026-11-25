@@ -312,3 +312,9 @@ def test_fixes_after_reading_the_covers():
                                              {'id': 2, 'title': 'Padre no hay más que uno 2: la llegada de la suegra',
                                               'release_date': '2020-08-28'}]}
     assert ti.find_movie(lambda k, q, y: padre.get(q, []), 'Padre no hay más que uno 2', None, 2020)['id'] == 2
+
+
+def test_short_title_that_tmdb_continues():
+    ong = [{'id': 9316, 'title': 'Ong Bak: El guerrero Muay Thai', 'original_title': 'องค์บาก', 'release_date': '2003-01-31'}]
+    assert ti.find_movie(lambda k, q, y: ong if q == 'Ong Bak' else [], 'Ong Bak', None, 2003)['id'] == 9316
+    assert ti.match_movie('Amal', 2023, [{'id': 3, 'title': 'Amalur', 'release_date': '2023-01-01'}], loose=True) is None
