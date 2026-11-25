@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Fase 1: catálogo del grupo de Telegram.  venv/bin/python tools/telegram_indexar.py
 
-Lee la lista que dejó la fase 0 (~/.config/kodi-papa/fase0_videos.json, temas Películas y Series), se queda con lo
+Lee los mensajes del grupo (~/.config/kodi-papa/mensajes.json, de tools/telegram_mensajes.py: temas Películas y
+Series, con sus carátulas), se queda con lo
 que está en castellano (en Telegram no se exige 1080p) y lo cruza con TMDb. Escribe el catálogo en
 ~/.config/kodi-papa/telegram.db y un informe en telegram_informe.json. La clave de TMDb se lee de los ajustes del
 asistente en la caja (por ADB) y no se escribe en ningún sitio. Las respuestas de TMDb se guardan en
@@ -22,7 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from resources.lib import telegram_idx as ti  # noqa: E402
 
 CONFIG = os.path.expanduser('~/.config/kodi-papa')
-VIDEOS = os.path.join(CONFIG, 'fase0_videos.json')
+MENSAJES = os.path.join(CONFIG, 'mensajes.json')  # fotos, vídeos y textos (tools/telegram_mensajes.py)
 DB = os.path.join(CONFIG, 'telegram.db')
 CACHE = os.path.join(CONFIG, 'tmdb_cache.json')
 REPORT = os.path.join(CONFIG, 'telegram_informe.json')
@@ -77,7 +78,8 @@ class Tmdb:
 
 
 def main():
-    videos = json.load(open(VIDEOS, encoding='utf-8'))
+    rows = json.load(open(MENSAJES, encoding='utf-8'))
+    videos = ti.with_headers(rows)  # cada vídeo con lo que dice su carátula
     tmdb = Tmdb(tmdb_key())
     print('Cruzando con TMDb…')
     with ThreadPoolExecutor(8) as pool:
@@ -88,13 +90,14 @@ def main():
         os.remove(DB)
     db = sqlite3.connect(DB)
     grupo = json.load(open(GRUPO, encoding='utf-8'))
-    ti.store(db, found, max(v['id'] for v in videos), grupo['grupo'], {int(k): v for k, v in grupo['temas'].items()})
+    ti.store(db, found, max(r['id'] for r in rows), grupo['grupo'], {int(k): v for k, v in grupo['temas'].items()})
     count = lambda q: db.execute(q).fetchone()[0]  # noqa: E731
     stats = {'vídeos leídos': len(videos),
              'películas distintas': count('SELECT COUNT(DISTINCT tmdb) FROM pelis'),
              'vídeos de películas': count('SELECT COUNT(*) FROM pelis'),
              'series distintas': count('SELECT COUNT(DISTINCT tmdb) FROM capitulos'),
              'capítulos distintos': count('SELECT COUNT(*) FROM (SELECT DISTINCT tmdb, temporada, capitulo FROM capitulos)'),
+             'películas partidas': count('SELECT COUNT(DISTINCT primera) FROM partes'),
              'sin ficha en TMDb': len(found['sin_ficha'])}
     db.close()
     os.chmod(DB, 0o600)

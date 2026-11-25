@@ -543,14 +543,17 @@ def _telegram_prefetch(tg):
 
 
 def _telegram_link(tg):
-    """La dirección del primer vídeo del grupo que responde (puede haberse borrado), o None."""
+    """Lo que hay que reproducir del primer vídeo del grupo que responde (puede haberse borrado), o None. Una
+    película partida en varios vídeos va como «stack://» con todas sus partes (si falta alguna, no vale)."""
     base, group, found = tg
     for v in found[:telegram.TRIES]:
-        url = telegram.stream_url(base, group, v['msg'])
         try:
-            with urlopen(Request(url, headers={'Range': 'bytes=0-1'}), timeout=20) as r:
-                if r.status in (200, 206):
-                    return url
+            for msg in v.get('parts') or [v['msg']]:
+                with urlopen(Request(telegram.stream_url(base, group, msg), headers={'Range': 'bytes=0-1'}),
+                             timeout=20) as r:
+                    if r.status not in (200, 206):
+                        raise IOError(r.status)
+            return telegram.play_target(base, group, v)
         except Exception as exc:
             ks.log('Telegram %s: %s' % (v['msg'], type(exc).__name__))
     return None

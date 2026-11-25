@@ -33,6 +33,14 @@ def stream_url(base_url, peer, msg):
     return '%s/stream/%d/%d/video.mp4' % (base_url, peer, msg)
 
 
+def play_target(base_url, peer, version):
+    """Lo que se le da a Kodi: la dirección del vídeo, o «stack://» con todas las partes si la película está partida
+    en varios vídeos (Kodi las encadena como una sola)."""
+    msgs = version.get('parts') or [version['msg']]
+    urls = [stream_url(base_url, peer, m) for m in msgs]
+    return urls[0] if len(urls) == 1 else 'stack://' + ' , '.join(u.replace(',', ',,') for u in urls)
+
+
 def prefetch_url(base_url, peer, msg):
     return '%s/api/prefetch?chat=%d&msg=%d' % (base_url, peer, msg)
 
@@ -57,22 +65,31 @@ def peer(path):
 
 
 def versions(path, kind, tmdb, season=None, episode=None):
-    """Los mensajes con este título, en el orden en que probarlos (telegram_idx.rank): [{msg, quality, size}]."""
+    """Los mensajes con este título, en el orden en que probarlos (telegram_idx.rank): [{msg, quality, size}], y
+    'parts' (todos los mensajes, en orden) si la película está partida en varios vídeos."""
     db = _open(path)
     if not db or not str(tmdb).isdigit():
         return []
+    parts = {}
     try:
         if kind == 'series':
             rows = db.execute('SELECT msg, calidad, bytes FROM capitulos WHERE tmdb = ? AND temporada = ? AND '
                               'capitulo = ?', (int(tmdb), season or 1, episode or 1)).fetchall()
         else:
             rows = db.execute('SELECT msg, calidad, bytes FROM pelis WHERE tmdb = ?', (int(tmdb),)).fetchall()
+            try:
+                for msg, first in db.execute('SELECT msg, primera FROM partes WHERE primera IN (%s) ORDER BY numero'
+                                             % ','.join('?' * len(rows)), [r[0] for r in rows]):
+                    parts.setdefault(first, []).append(msg)
+            except sqlite3.Error:
+                pass  # catálogo de antes de las partes
     except sqlite3.Error:
         return []
     finally:
         db.close()
-    found = [{'id': m, 'msg': m, 'quality': q, 'size': b} for m, q, b in rows]
-    return [{'msg': v['msg'], 'quality': v['quality'], 'size': v['size']} for v in sorted(found, key=telegram_idx.rank)]
+    found = sorted(({'id': m, 'msg': m, 'quality': q, 'size': b} for m, q, b in rows), key=telegram_idx.rank)
+    return [dict({'msg': v['msg'], 'quality': v['quality'], 'size': v['size']},
+                 **({'parts': parts[v['msg']]} if len(parts.get(v['msg'], [])) > 1 else {})) for v in found]
 
 
 def newest(path, kind, limit=NEWEST, since=None):
@@ -112,8 +129,8 @@ def mix(row, extra):
 
 
 def media_url(base_url, peer, cursor=None, n=PAGE):
-    """Los vídeos del grupo, del más nuevo al más viejo, por páginas (api/media del addon de Telegram)."""
-    query = [('chats', peer), ('kind', 'video'), ('n', n)] + ([('cursor', cursor)] if cursor else [])
+    """Los vídeos y las fotos (carátulas) del grupo, del más nuevo al más viejo, por páginas (api/media del addon)."""
+    query = [('chats', peer), ('kind', 'all'), ('n', n)] + ([('cursor', cursor)] if cursor else [])
     return '%s/api/media?%s' % (base_url, urlencode(query))
 
 
@@ -123,7 +140,7 @@ def due(now, last_day, hours=UPDATE_HOURS):
 
 
 def new_videos(fetch, base_url, peer, since, max_pages=MAX_PAGES):
-    """fetch(url) → JSON. Los vídeos del grupo con número de mensaje mayor que since (lo aún no catalogado)."""
+    """fetch(url) → JSON. Los vídeos y fotos del grupo con número de mensaje mayor que since (lo aún no catalogado)."""
     out, cursor = [], None
     for _ in range(max_pages):
         page = fetch(media_url(base_url, peer, cursor)) or {}

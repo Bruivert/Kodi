@@ -661,9 +661,10 @@ def telegram_update(force=False):
         since = telegram_idx.last_msg(db)
         items = telegram.new_videos(lambda url: json.loads(fetch_text(url) or '{}'), telegram.base(token), peer, since)
         temas = telegram_idx.topics(db)
-        videos = [telegram_idx.from_addon(i, temas) for i in items]
+        rows = [telegram_idx.from_addon(i, temas) for i in items]
+        videos = telegram_idx.with_headers(rows)  # cada vídeo con lo que dice su carátula
         found = telegram_idx.catalogue(videos, _tmdb_search(key))
-        telegram_idx.store(db, found, max([since] + [v['id'] for v in videos]), peer)
+        telegram_idx.store(db, found, max([since] + [r['id'] for r in rows]), peer)
         db.execute("INSERT OR REPLACE INTO estado VALUES ('actualizado', ?)", (time.strftime('%Y-%m-%d'),))
         db.commit()
     finally:
