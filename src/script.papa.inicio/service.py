@@ -208,14 +208,15 @@ def main():
     # Calidad (1080p o más) de los títulos de las filas de Balandro guardadas, poco a poco y con la caja tranquila.
     calidades = fondo.Every(ks.check_saved_rows, 30, lambda: xbmc.getCondVisibility('!Window.IsActive(fullscreenvideo)'),
                             time.time)
-    # Catálogo del grupo de Telegram: lo nuevo, una vez al día de madrugada y con la caja sin usar (telegram.py).
-    telegram_job = fondo.Every(ks.telegram_update, 1800, lambda: xbmc.getCondVisibility(
+    # De madrugada, una vez al día y con la caja sin usar: lo nuevo del grupo de Telegram al catálogo y lo de las filas
+    # preparado en AllDebrid (precalentar.py).
+    telegram_job = fondo.Every(ks.nightly, 1800, lambda: xbmc.getCondVisibility(
         'System.IdleTime(600) + !Player.HasMedia'), time.time)
     # Índice de títulos de Palantir para la lupa, listo antes de la primera búsqueda.
     indice = catalogo.IndexKeeper(ks.palantir_db, xbmcvfs.translatePath(ks.CATALOGO), time.time)
     # En un hilo aparte: cada petición tarda segundos y aquí dejaba a los tráileres sin responder al mando.
     worker = fondo.Worker([('fila pedida', refresher.tick), ('fondo de deportes pedido a TheSportsDB', arte.tick),
-                           ('lupa', indice.tick), ('calidad', calidades.tick), ('Telegram', telegram_job.tick)],
+                           ('lupa', indice.tick), ('calidad', calidades.tick), ('de madrugada', telegram_job.tick)],
                           monitor.waitForAbort, ks.log)
     worker.start()
     try:  # página para pegar desde el móvil la dirección de PeLiS (pegar.py)

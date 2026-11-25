@@ -4,6 +4,7 @@
 plugin://script.papa.inicio/?lista=favoritos  los favoritos de Kodi con su fanart y ficha de TMDb
 plugin://script.papa.inicio/?run=<orden>      ejecuta la orden de un favorito que no es carpeta ni vídeo
 plugin://script.papa.inicio/?telegram=actualizar  añade ya al catálogo lo nuevo del grupo de Telegram
+plugin://script.papa.inicio/?precalentar=ya       prepara ya en AllDebrid lo que sale en las filas
 plugin://script.papa.inicio/?fila=<lista>     una fila de Palantir desde su copia (filas.py)
 plugin://script.papa.inicio/?buscar=<todo|peliculas|series>&q=<texto>  resultados de la lupa (lupa.py; catalogo.py de reserva)
 plugin://script.papa.inicio/?play=<peliculas|series>&tmdb=…  reproduce por Balandro (fichas.py, balandro.py)
@@ -793,6 +794,9 @@ def main(argv):
     params = {k: v[0] for k, v in parse_qs((argv[2] if len(argv) > 2 else '').lstrip('?')).items()}
     if params.get('telegram') == 'actualizar':  # lo nuevo del grupo ya, sin esperar a la madrugada
         ks.notify('Telegram: %s' % (ks.telegram_update(force=True) or 'no se pudo actualizar'), 8000)
+        return
+    if params.get('precalentar') == 'ya':  # lo de las filas, preparado ya en AllDebrid
+        ks.notify('AllDebrid: %s' % (ks.prewarm() or 'no se pudo'), 8000)
         return
     if params.get('run'):
         xbmc.executebuiltin(params['run'])
