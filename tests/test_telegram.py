@@ -55,11 +55,11 @@ def test_newest_titles_for_the_rows(tmp_path):
     db.commit()
     db.close()
     movies = tg.newest(path, 'peliculas')
-    assert [m['title'] for m in movies] == ['Nueva', 'Vieja']  # mensaje 13 es más nuevo que el 12
-    assert movies[1] == {'id': 99, 'title': 'Vieja', 'release_date': '1955-01-01', 'poster_path': '/p99.jpg',
+    assert [m['title'] for m in movies] == ['Vieja']  # «Nueva» solo tiene una versión sin dato: no va a las filas
+    assert movies[0] == {'id': 99, 'title': 'Vieja', 'release_date': '1955-01-01', 'poster_path': '/p99.jpg',
                          'backdrop_path': '/f99.jpg', 'overview': 'x', 'vote_average': 7.5}
     assert tg.newest(path, 'series')[0]['name'] == 'Serie' and tg.newest(path, 'series', 0) == []
-    assert [m['title'] for m in tg.newest(path, 'peliculas', since=2025)] == ['Nueva']
+    assert tg.newest(path, 'peliculas', since=2025) == []
     assert tg.newest(str(tmp_path / 'no.db'), 'series') == []
 
 
@@ -107,3 +107,27 @@ def test_split_movies_play_as_one(tmp_path):
     assert tg.play_target(b, -100, v[0]) == 'stack://%s , %s' % (tg.stream_url(b, -100, 30), tg.stream_url(b, -100, 31))
     assert tg.play_target(b, -100, {'msg': 9}) == tg.stream_url(b, -100, 9)
     assert 'parts' not in tg.versions(path, 'peliculas', '99')[0]
+
+
+def test_hd_in_the_group_means_no_waiting_for_pelis():
+    assert tg.has_hd([{'quality': '720p'}, {'quality': '1080p'}]) and tg.has_hd([{'quality': '4K'}])
+    assert not tg.has_hd([{'quality': '?'}, {'quality': 'SD'}]) and not tg.has_hd([])
+
+
+def test_rows_only_show_titles_in_hd(tmp_path):
+    path = _db(tmp_path)
+    db = sqlite3.connect(path)
+    db.executescript('''
+        CREATE TABLE titulos (tmdb INTEGER, tipo TEXT, titulo TEXT, año INTEGER, poster TEXT, fondo TEXT,
+                              sinopsis TEXT, nota REAL);
+        INSERT INTO titulos VALUES (99, 'peliculas', 'Con 1080p', 2026, '/p.jpg', NULL, NULL, NULL),
+                                   (7, 'peliculas', 'Solo sin dato', 2026, '/p.jpg', NULL, NULL, NULL);
+    ''')
+    db.commit()
+    db.close()
+    assert [m['title'] for m in tg.newest(path, 'peliculas')] == ['Con 1080p']
+
+
+def test_low_quality_notice():
+    assert tg.low_quality_notice('Tívoli', 'SD', False) == '«Tívoli» en SD: no hay en 1080p'
+    assert tg.low_quality_notice('X', '?', True).endswith('(se prepara en 1080p para la próxima vez)')

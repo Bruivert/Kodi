@@ -642,6 +642,16 @@ def _tmdb_search(key):
     return search
 
 
+def _head_bytes(url, size=64 * 1024):
+    from urllib.request import Request, urlopen
+    try:
+        with urlopen(Request(url, headers={'Range': 'bytes=0-%d' % (size - 1)}), timeout=60) as r:
+            return r.read(size)
+    except Exception as exc:
+        log('Telegram cabecera: %s' % type(exc).__name__)
+        return b''
+
+
 def telegram_update(force=False):
     """Añade al catálogo (telegram.db) lo subido al grupo desde la última vez: una vez al día, de madrugada (o ya,
     con force). Devuelve un resumen, o None si no tocaba o falta algo (catálogo, sesión de Telegram, clave TMDb)."""
@@ -663,6 +673,11 @@ def telegram_update(force=False):
         temas = telegram_idx.topics(db)
         rows = [telegram_idx.from_addon(i, temas) for i in items]
         videos = telegram_idx.with_headers(rows)  # cada vídeo con lo que dice su carátula
+        for v in videos:  # la resolución que Telegram no dice (.mkv, .avi), de los primeros 64 KB
+            if v.get('tema') in ('Películas', 'Series') and not (v.get('width') and v.get('height')):
+                found = telegram_idx.probe_resolution(_head_bytes(telegram.stream_url(telegram.base(token), peer, v['id'])))
+                if found:
+                    v['width'], v['height'] = found
         found = telegram_idx.catalogue(videos, _tmdb_search(key))
         telegram_idx.store(db, found, max([since] + [r['id'] for r in rows]), peer)
         db.execute("INSERT OR REPLACE INTO estado VALUES ('actualizado', ?)", (time.strftime('%Y-%m-%d'),))
@@ -673,6 +688,128 @@ def telegram_update(force=False):
         len(videos), len(found['pelis']), len(found['capitulos']))
     log('Telegram: ' + summary)
     return summary
+
+
+# --- lo de las filas, preparado de antemano en AllDebrid (precalentar.py) ----------------------------------------
+
+PRECALENTADO = PROFILE + 'precalentado.json'
+
+
+def _json_get(url):
+    text = fetch_text(url)
+    try:
+        return json.loads(text) if text else {}
+    except ValueError:
+        return {}
+
+
+def _alldebrid_api():
+    """(net, cabeceras, url de la API) de AllDebrid con la cuenta vinculada en ResolveURL, o None."""
+    try:
+        from resolveurl.plugins import alldebrid
+        resolver = alldebrid.AllDebridResolver()
+    except Exception as exc:
+        log('AllDebrid no disponible: %s' % exc)
+        return None
+    if resolver.get_setting('enabled') != 'true' or not resolver.get_setting('token'):
+        return None
+    return resolver.net, resolver.headers, alldebrid.api_url
+
+
+def _row_tmdbs(key, kind):
+    from resources.lib import telegram
+    items = balandro.fila(key, (load_fila(key) or {}).get('items') or []) if key in balandro.FILAS else []
+    ids = [str((i.get('uniqueids') or {}).get('tmdb') or '') for i in items]
+    year = time.localtime().tm_year
+    since = year - 1 if key == 'peliculas.estrenos' else None
+    ids += [str(r['id']) for r in telegram.newest(xbmcvfs.translatePath(TELEGRAM), kind, since=since)]
+    return [i for i in ids if i.isdigit()]
+
+
+def prewarm(force=False):
+    """Pide a AllDebrid el mejor torrent en castellano de lo que sale en las filas (precalentar.py) y quita de la
+    lista lo pedido hace más de dos semanas. Devuelve un resumen, o None si falta AllDebrid o la clave de TMDb."""
+    from resources.lib import debrid, precalentar, torrentio
+    api, key = _alldebrid_api(), setting('tmdb_key')
+    if not api or not key:
+        return None
+    net, headers, url = api
+    now = time.time()
+    try:
+        record = json.loads(read_file(PRECALENTADO) or '{}')
+    except ValueError:
+        record = {}
+    shows = []
+    for tmdb in _row_tmdbs('series.novedades', 'series')[:precalentar.MAX_PER_NIGHT]:
+        last = precalentar.last_episode(_json_get('https://api.themoviedb.org/3/tv/%s?api_key=%s' % (tmdb, key)))
+        if last:
+            shows.append((tmdb, last[0], last[1]))
+    movies = _row_tmdbs('peliculas.estrenos', 'peliculas') + _row_tmdbs('peliculas.recientes', 'peliculas')
+    asked = ready = downloading = 0
+    for target in precalentar.targets(movies, shows):
+        if not force and not precalentar.due(record, target, now):
+            continue
+        kind, tmdb, season, episode = target
+        path = 'tv' if kind == 'series' else 'movie'
+        imdb = _json_get('https://api.themoviedb.org/3/%s/%s/external_ids?api_key=%s' % (path, tmdb, key)).get('imdb_id')
+        found = torrentio.best(_json_get(torrentio.stream_url(kind, imdb, season, episode)).get('streams')) if imdb else []
+        record[precalentar.key(target)] = {'time': now, 'id': None}
+        if not found:
+            continue
+        asked += 1
+        try:
+            answer = json.loads(net.http_POST(url + '/magnet/upload', form_data={'magnets': debrid.magnet(
+                found[0]['btih'], found[0]['title'])}, headers=headers).content)
+            magnet = ((answer.get('data') or {}).get('magnets') or [{}])[0]
+        except Exception as exc:
+            log('AllDebrid preparar %s: %s' % (tmdb, exc))
+            continue
+        if magnet.get('ready'):  # ya lo tenía: arrancará al momento; no se deja en la lista
+            ready += 1
+            _alldebrid_delete(net, headers, url, magnet.get('id'))
+        else:
+            downloading += 1
+            record[precalentar.key(target)]['id'] = magnet.get('id')
+    old = precalentar.to_delete(record, now)
+    for magnet_id in old:
+        _alldebrid_delete(net, headers, url, magnet_id)
+    write_file(PRECALENTADO, json.dumps(precalentar.forget(record, old)))
+    summary = '%d pedidos a AllDebrid: %d ya listos, %d descargándose; %d quitados de la lista' % (
+        asked, ready, downloading, len(old))
+    log('Precalentar: ' + summary)
+    return summary
+
+
+def _alldebrid_delete(net, headers, url, magnet_id):
+    if not magnet_id:
+        return
+    try:
+        net.http_POST(url + '/magnet/delete', form_data={'id': magnet_id}, headers=headers)
+    except Exception as exc:
+        log('AllDebrid quitar %s: %s' % (magnet_id, exc))
+
+
+NOCHE = PROFILE + 'noche.json'
+
+
+def nightly():
+    """Lo de cada madrugada (una vez al día, con la caja sin usar): lo nuevo del grupo de Telegram al catálogo y lo
+    de las filas preparado en AllDebrid."""
+    from resources.lib import telegram
+    try:
+        last = json.loads(read_file(NOCHE) or '{}').get('dia', '')
+    except ValueError:
+        last = ''
+    if not telegram.due(time.localtime(), last):
+        return None
+    write_file(NOCHE, json.dumps({'dia': time.strftime('%Y-%m-%d')}))
+    out = []
+    for name, job in (('Telegram', lambda: telegram_update(force=True)), ('AllDebrid', prewarm)):
+        try:
+            out.append('%s: %s' % (name, job()))
+        except Exception as exc:
+            log('%s de madrugada: %s' % (name, exc))
+    return ' · '.join(out)
 
 
 # --- diagnóstico ------------------------------------------------------------
