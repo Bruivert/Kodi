@@ -10,7 +10,7 @@ import xbmcaddon
 import xbmcgui
 import xbmcvfs
 
-from resources.lib import diagnostico, discover, filas, menus, patches
+from resources.lib import balandro, calidad, diagnostico, discover, filas, menus, patches
 
 ADDON_ID = 'script.papa.inicio'
 TITLE = 'Kodi de Papá'
@@ -28,7 +28,12 @@ FILAS = PROFILE + 'filas/'  # copias de las filas de Palantir (filas.py)
 FILAS_INDEX = FILAS + 'indice.json'  # 1.0.10: índice común (leer y reescribir); ya no se usa
 FILA_KEY = re.compile(r'^[a-z]+\.[a-z0-9]+$')  # "peliculas.estrenos": nada de "../" desde la URL del plugin
 ARTE = PROFILE + 'arte_deportes.json'  # fanart de TheSportsDB para Deportes (arte_deportes.py)
+INTENTOS = PROFILE + 'intentos.json'  # última fuente probada por ficha y si arrancó (balandro.pick)
+CALIDADES = PROFILE + 'calidades.json'  # calidad de cada página de PasateATorrent (calidad.py)
+BALANDRO = 'plugin.video.balandro'
+TELEGRAM_ADDON = 'plugin.video.telegram'
 CATALOGO = PROFILE + 'catalogo.db'  # índice de títulos de Palantir para la lupa (catalogo.py)
+TELEGRAM = PROFILE + 'telegram.db'  # vídeos del grupo de Telegram por película/capítulo (telegram.py)
 # La base de Palantir, donde la busca su propio código (MoriaDB): la del addon si existe, si no la descargada.
 PALANTIR_DB = ('special://home/addons/plugin.video.palantir3/moria.cm3',
                'special://profile/addon_data/script.module/settings.xml')
@@ -224,10 +229,14 @@ def apply_tmdbhelper():
 # --- menús ------------------------------------------------------------------
 
 def load_rutas():
+    """Las listas encontradas en Palantir y BlackGhost; 'balandro' dice si está instalado (filas y menú de Balandro)."""
     try:
-        return json.loads(read_file(RUTAS) or '{}')
+        rutas = json.loads(read_file(RUTAS) or '{}')
     except ValueError:
         return {}
+    if rutas:
+        rutas['balandro'] = has_addon(BALANDRO)
+    return rutas
 
 
 def _load_json(path, default):
@@ -278,6 +287,115 @@ def load_arte():
 
 def save_arte(state):
     write_file(ARTE, json.dumps(state, ensure_ascii=False))
+
+
+def fetch_text(url):
+    """Una página web como texto ('' si falla). requests trae sus certificados: el Python de Kodi en Android a veces no
+    tiene los del sistema."""
+    headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/120 Safari/537.36'}
+    try:
+        import requests
+        response = requests.get(url, headers=headers, timeout=15)
+        return response.text if response.ok else ''
+    except ImportError:
+        from urllib.request import Request, urlopen
+        try:
+            with urlopen(Request(url, headers=headers), timeout=15) as response:
+                return response.read().decode('utf-8', 'ignore')
+        except Exception:
+            return ''
+    except Exception:
+        return ''
+
+
+def fetch_bytes(url):
+    """Un fichero (un .torrent) como bytes, o b'' si falla."""
+    headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/120 Safari/537.36'}
+    try:
+        import requests
+        response = requests.get(url, headers=headers, timeout=15)
+        return response.content if response.ok else b''
+    except Exception:
+        return b''
+
+
+def post_json(url, body, referer):
+    """POST con JSON y la respuesta como dict ({} si falla). Para el reto de DonTorrent (plugin.py)."""
+    headers = {'User-Agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+               'Content-Type': 'application/json', 'Referer': referer}
+    try:
+        import requests
+        response = requests.post(url, data=json.dumps(body), headers=headers, timeout=15)
+        return response.json() if response.ok else {}
+    except Exception:
+        return {}
+
+
+def load_calidades():
+    return _load_json(CALIDADES, {})
+
+
+def save_calidades(cache):
+    write_file(CALIDADES, json.dumps(cache, ensure_ascii=False))
+
+
+def check_pages(kind, urls, cache, now, workers=1):
+    """Mira la calidad de las páginas que falten o hayan caducado y la apunta en cache. Devuelve cuántas miró."""
+    todo = [u for u in dict.fromkeys(urls) if u and not calidad.fresh(cache.get(u), now)]
+    if not todo:
+        return 0
+    if workers > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(workers) as pool:
+            pages = list(pool.map(fetch_text, todo))
+    else:
+        pages = [fetch_text(u) for u in todo]
+    for url, html in zip(todo, pages):
+        if html:  # sin respuesta no se apunta nada: se vuelve a mirar la próxima vez
+            cache[url] = calidad.page_entry(kind, html, now)
+    return len(todo)
+
+
+def fetch_row_hd(path, workers=1, pages=None):
+    """Una fila de Balandro con varias páginas de la web (balandro.ROW_PAGES) y la calidad de cada título ya mirada
+    (calidades.json), para enseñar solo lo de 1080p o más. Las demás listas, tal cual."""
+    files = fetch_row(path)
+    kind = balandro.row_kind(path)
+    if not files or not kind:
+        return files
+    following = balandro.next_page(files)
+    for _ in range((pages or balandro.ROW_PAGES) - 1):
+        if not following:
+            break
+        more = fetch_row(following) or []
+        following = balandro.next_page(more)
+        files += more
+    files = [f for f in files if not balandro.is_next(f)]
+    cache = load_calidades()
+    urls = [(balandro.decode(f.get('file')) or {}).get('url') for f in files]
+    urls = [u for u in urls if balandro.needs_page(u)]  # DonTorrent dice la calidad en el nombre
+    if check_pages(kind, urls, cache, time.time(), workers):
+        save_calidades(cache)
+    return files
+
+
+def check_saved_rows(limit=10):
+    """Mira la calidad de los títulos de las filas de Balandro ya guardadas que aún no la tengan (o la tengan vieja),
+    hasta limit páginas. Para el servicio: las filas no se quedan vacías esperando a renovarse."""
+    cache, now, checked = load_calidades(), time.time(), 0
+    for key in sorted(balandro.FILAS):
+        entry = load_fila(key) or {}
+        kind = balandro.row_kind(entry.get('path') or '')
+        if not kind:
+            continue
+        urls = [u for u in (balandro.page_url(item) for item in entry.get('items') or []) if balandro.needs_page(u)]
+        todo = [u for u in urls if u and not calidad.fresh(cache.get(u), now)][:limit - checked]
+        checked += check_pages(kind, todo, cache, now)
+        if checked >= limit:
+            break
+    if checked:
+        save_calidades(cache)
+    return '%d páginas mirando su calidad' % checked if checked else None
 
 
 def fetch_row(path):
@@ -361,6 +479,7 @@ def run_discovery():
     if bg:
         rutas['blackghost'] = bg
     write_file(RUTAS, json.dumps(rutas, indent=2, ensure_ascii=False))
+    rutas['balandro'] = has_addon(BALANDRO)
     _write_preset(rutas)
     return rutas
 
@@ -478,6 +597,9 @@ PATCHES = [
     (SKIN, patches.AF3_STRINGS_FILE, patches.patch_af3_strings, lambda version: True),
     (SKIN, patches.AF3_IMAGES_FILE, patches.patch_af3_episode_thumbs, lambda version: True),
     (SKINVARIABLES, patches.SKINVARIABLES_STRINGS_FILE, patches.patch_skinvariables_strings, lambda version: True),
+    (BALANDRO, patches.BALANDRO_FILE, patches.patch_balandro_quality, lambda version: True),
+    (BALANDRO, patches.DONTORRENTS_FILE, patches.patch_dontorrents_search, lambda version: True),
+    (TELEGRAM_ADDON, patches.TELEGRAM_FILE, patches.patch_telegram_topic, lambda version: True),
 ]
 
 
@@ -501,6 +623,55 @@ def apply_patches():
         log('arreglo aplicado a %s %s' % (addon_id, version))
         done.append(addon_id)
     return done
+
+
+# --- catálogo del grupo de Telegram ------------------------------------------------------------------------------
+
+def _tmdb_search(key):
+    from urllib.parse import urlencode
+
+    def search(kind, query, year):
+        params = {'api_key': key, 'language': 'es-ES', 'include_adult': 'false', 'query': query}
+        if year:
+            params['year' if kind == 'movie' else 'first_air_date_year'] = year
+        text = fetch_text('https://api.themoviedb.org/3/search/%s?%s' % (kind, urlencode(params)))
+        try:
+            return (json.loads(text) if text else {}).get('results', [])[:10]
+        except ValueError:
+            return []
+    return search
+
+
+def telegram_update(force=False):
+    """Añade al catálogo (telegram.db) lo subido al grupo desde la última vez: una vez al día, de madrugada (o ya,
+    con force). Devuelve un resumen, o None si no tocaba o falta algo (catálogo, sesión de Telegram, clave TMDb)."""
+    import sqlite3
+    from resources.lib import telegram, telegram_idx
+    path = xbmcvfs.translatePath(TELEGRAM)
+    if not xbmcvfs.exists(TELEGRAM):
+        return None
+    db = sqlite3.connect(path)
+    try:
+        row = db.execute("SELECT valor FROM estado WHERE clave = 'actualizado'").fetchone()
+        if not force and not telegram.due(time.localtime(), row[0] if row else ''):
+            return None
+        token, peer, key = read_file(telegram.TOKEN).strip(), telegram.peer(path), setting('tmdb_key')
+        if not (token and peer and key):
+            return None
+        since = telegram_idx.last_msg(db)
+        items = telegram.new_videos(lambda url: json.loads(fetch_text(url) or '{}'), telegram.base(token), peer, since)
+        temas = telegram_idx.topics(db)
+        videos = [telegram_idx.from_addon(i, temas) for i in items]
+        found = telegram_idx.catalogue(videos, _tmdb_search(key))
+        telegram_idx.store(db, found, max([since] + [v['id'] for v in videos]), peer)
+        db.execute("INSERT OR REPLACE INTO estado VALUES ('actualizado', ?)", (time.strftime('%Y-%m-%d'),))
+        db.commit()
+    finally:
+        db.close()
+    summary = '%d vídeos nuevos: %d de películas y %d capítulos con ficha' % (
+        len(videos), len(found['pelis']), len(found['capitulos']))
+    log('Telegram: ' + summary)
+    return summary
 
 
 # --- diagnóstico ------------------------------------------------------------

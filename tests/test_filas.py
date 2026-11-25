@@ -41,6 +41,14 @@ def test_rows_are_the_palantir_lists_without_trakt_and_the_blackghost_ones():
     assert fl.row_paths({}) == {}
 
 
+def test_with_balandro_the_same_rows_come_from_balandro():
+    rows = fl.row_paths(dict(RUTAS, balandro=True))
+    assert set(rows) == set(fl.row_paths(RUTAS))  # mismas filas
+    assert rows['peliculas.estrenos'].startswith('plugin://plugin.video.balandro/?')
+    assert rows['series.novedades'].startswith('plugin://plugin.video.balandro/?')
+    assert rows['deportes.agenda'] == 'plugin://bg/?agenda'
+
+
 def test_sports_are_renewed_more_often_than_films():
     # La agenda cambia a lo largo del día; las películas y series, de un día para otro.
     assert fl.max_age('deportes.agenda') < fl.max_age('peliculas.estrenos')

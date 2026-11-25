@@ -8,6 +8,7 @@ sirven desde una copia (plugin.py, <1 s) que el servicio renueva por detrás, de
 """
 from urllib.parse import unquote, urlencode
 
+from resources.lib import balandro
 from resources.lib.discover import needs_trakt
 
 BASE = 'plugin://script.papa.inicio/'
@@ -31,8 +32,9 @@ MEDIATYPES = {'movie', 'tvshow', 'season', 'episode', 'musicvideo', 'video', 'se
 
 
 def row_paths(rutas):
-    """{'peliculas.estrenos': ruta de Palantir, 'deportes.agenda': ruta de BlackGhost} de las listas que forman
-    filas (nunca las de Palantir que piden Trakt)."""
+    """{'peliculas.estrenos': ruta, 'deportes.agenda': ruta de BlackGhost} de las listas que forman filas (nunca las
+    de Palantir que piden Trakt). Con Balandro instalado, las filas de Palantir se llenan con su lista equivalente de
+    Balandro (balandro.FILAS): mismas filas y nombres, otra fuente."""
     pal = (rutas or {}).get('palantir') or {}
     rows = {'%s.%s' % (group, key): item['path']
             for group in GROUPS for key, item in sorted((pal.get(group) or {}).items())
@@ -41,6 +43,8 @@ def row_paths(rutas):
     sports = dict(bg.get('deportes') or {}, agenda=bg.get('agenda'))
     rows.update({'deportes.%s' % key: sports[key]['path'] for key in FILAS_DEPORTES
                  if (sports.get(key) or {}).get('path')})
+    if (rutas or {}).get('balandro'):
+        rows.update({key: balandro.row_url(key) for key in rows if key in balandro.FILAS})
     return rows
 
 

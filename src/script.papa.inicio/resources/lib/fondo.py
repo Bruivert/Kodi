@@ -25,3 +25,18 @@ class Worker(threading.Thread):
                         self.log('%s: %s' % (name, done))
                 except Exception as exc:  # un fallo de red no debe parar el hilo
                     self.log('%s: %s' % (name, exc))
+
+
+class Every(object):
+    """Llama a job() cada interval segundos, si can_run(). tick() devuelve lo que devuelva job() o None."""
+
+    def __init__(self, job, interval, can_run, clock):
+        self.job, self.interval, self.can_run, self.clock = job, interval, can_run, clock
+        self.next_time = 0.0
+
+    def tick(self):
+        now = self.clock()
+        if now < self.next_time or not self.can_run():
+            return None
+        self.next_time = now + self.interval
+        return self.job()
