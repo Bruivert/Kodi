@@ -123,7 +123,7 @@ def test_topic_from_patched_addon_or_guessed():
     assert ti.topic({'name': 'Tony (2026).mp4'}, temas) == 'Películas'
     v = ti.from_addon({'msg_id': 9, 'name': 'Tony (2026).mp4', 'text': '', 'w': 1920, 'h': 800, 'size': 5,
                        'duration': 60, 'topic': 11}, temas)
-    assert v == {'id': 9, 'name': 'Tony (2026).mp4', 'caption': '', 'width': 1920, 'height': 800, 'size': 5,
+    assert v == {'id': 9, 'tipo': 'video', 'name': 'Tony (2026).mp4', 'caption': '', 'width': 1920, 'height': 800, 'size': 5,
                  'duration': 60, 'tema': 'Películas'}
 
 
@@ -234,3 +234,81 @@ def test_saga_numbers_tmdb_leaves_out_are_fine():
     assert ti.match_movie('75 Dias', 2021, dias)['id'] == 2
     assert ti.match_movie('Amal', 2023, [{'id': 3, 'title': 'Amalur', 'release_date': '2023-01-01'}]) is None
     assert ti.match_movie('Sissi 1', 1955, [{'id': 4, 'title': 'Sissi', 'release_date': '1955-12-21'}])['id'] == 4
+
+
+def test_cover_messages():
+    h = ti.head_info('BUSCANDO A WANDA\n#BuscandoAWanda\n\nCAPITULO 6\n\nSinopsis\nSerie de TV (2026-). 1 temporada, 8 episodios.')
+    assert (h['title'], h['season'], h['single']) == ('BUSCANDO A WANDA', None, True)
+    h = ti.head_info('- Huesos 1\n- Bones 1\n(2005)\nLatino')
+    assert (h['title'], h['alt']) == ('Huesos 1', 'Bones 1')
+    assert ti.head_info('El cuento de la criada\nTemporada: 2\n\nLa segunda temporada…')['season'] == 2
+    assert ti.head_info('<TEMPORADA 1>')['title'] is None and ti.head_info('#Temporada01')['season'] == 1
+    assert ti.head_info('Taboo (2017)(MiniSerie)[Castellano]\n\nTemporada: Unica (MiniSerie)')['single']
+
+
+def test_videos_take_what_their_cover_says():
+    rows = [{'id': 1, 'tema': 'Series', 'tipo': 'foto', 'caption': 'BUSCANDO A WANDA\nSerie de TV (2026-). 1 temporada'},
+            {'id': 2, 'tema': 'Series', 'tipo': 'video', 'name': 'Ep_6 Viernes noche online (2026) - Movistar Plus.mp4',
+             'caption': '6'},
+            {'id': 3, 'tema': 'Películas', 'tipo': 'foto', 'caption': 'Supergirl\n(2026)\nSinopsis: Lejos de la Tierra'},
+            {'id': 4, 'tema': 'Películas', 'tipo': 'video', 'name': None, 'caption': ''},
+            {'id': 5, 'tema': 'Series', 'tipo': 'foto', 'caption': 'TEMPORADA 3'},
+            {'id': 6, 'tema': 'Series', 'tipo': 'video', 'name': 'Rita 307.mkv', 'caption': ''},
+            {'id': 7, 'tema': 'Series', 'tipo': 'texto', 'caption': ''},
+            {'id': 8, 'tema': 'Series', 'tipo': 'video', 'name': '16.mp4', 'caption': ''}]
+    v = {x['id']: x for x in ti.with_headers(rows)}
+    assert set(v) == {2, 4, 6, 8}
+    d = ti.describe_full(v[2])
+    assert (d['title'], d['season'], d['episode']) == ('BUSCANDO A WANDA', 1, 6)
+    assert ti.describe_full(v[4])['title'] == 'Supergirl'
+    d = ti.describe_full(v[6])
+    assert (d['title'], d['season'], d['episode']) == ('Rita', 3, 7)
+    assert ti.describe_full(v[8])['season'] is None  # tras un separador no hay carátula: no se adivina
+
+
+def test_split_movies_are_parts_not_versions():
+    def v(i, name, minutes, bloque=1):
+        return {'id': i, 'name': name, 'duration': minutes * 60, 'bloque': bloque}
+    videos = [v(1, 'Ong Bak (1).mp4', 60), v(2, 'Ong Bak (2).mp4', 45),
+              v(3, '1_2_En_el_oeste_se_puede_hacer_amigo.mp4', 42, 2), v(4, '2_2_En_el_oeste_se_puede_hacer_amigo.mp4', 42, 2),
+              v(5, 'Los juegos del hambre. Sinsajo. Parte 1.mp4', 122, 3), v(6, 'Los juegos del hambre. Sinsajo. Parte 2.mp4', 136, 3),
+              v(7, 'Mala persona (2024).mp4', 99, 4), v(8, 'Mala persona.mkv', 0, 4),
+              v(9, 'La monja 2 (2023) 1.mp4', 60, 5), v(10, 'La monja 2 (2023) 2.mp4', 49, 5),
+              v(11, 'Viernes 13 parte 1.mp4', 95, 6), v(12, 'Viernes 13 parte 4.mp4', 91, 6)]
+    assert ti.movie_parts(videos) == {1: [1, 2], 3: [3, 4], 9: [9, 10]}
+
+
+def test_castellano_with_subtitles_is_fine():
+    assert ti.spanish({'name': 'Los herejes (2022) ª[Web Dl 1080] Castellano Subs.mkv'})
+    assert not ti.spanish({'name': 'Serie 1x01 Subtitulada.mkv'})
+    assert not ti.spanish({'name': 'Temporada 6, Capitulo 20.mp4'}, head='Huesos (2005) Latino')
+    assert _p('Capitulo 135.mp4')[2:] == (None, 135) and _p('Taboo720p1x01 [by Erpiyo].mkv')[2:] == (1, 1)
+    assert _p('Mr_Inbetween_Temporada_3_HDTV_720pCap_309AC3_5_1.mkv')[2:] == (3, 9)
+
+
+def test_a_cover_from_another_series_is_ignored():
+    rows = [{'id': 1, 'tema': 'Series', 'tipo': 'foto', 'caption': 'Teacup\nVOSE 2024\nSerie de TV. 1 temporada'},
+            {'id': 2, 'tema': 'Series', 'tipo': 'video', 'name': 'Mujeres desesperadas 2x08.mp4', 'caption': ''},
+            {'id': 3, 'tema': 'Series', 'tipo': 'foto', 'caption': 'Vikingos\nTemporada 1'},
+            {'id': 4, 'tema': 'Series', 'tipo': 'video', 'name': '1923 1x08 (Fin).mp4', 'caption': ''},
+            {'id': 5, 'tema': 'Series', 'tipo': 'foto', 'caption': 'Twisted Metal [Temporada 1] (2023)'},
+            {'id': 6, 'tema': 'Series', 'tipo': 'video', 'name': 'Twisted Metal 1x03.mp4', 'caption': ''}]
+    v = {x['id']: x for x in ti.with_headers(rows)}
+    d = ti.describe_full(v[2])
+    assert d['title'] == 'Mujeres desesperadas' and not d['head_ok']
+    assert ti.spanish(v[2], '') and ti.describe_full(v[4])['title'] == '1923'
+    assert ti.describe_full(v[6])['head_ok']
+
+
+def test_fixes_after_reading_the_covers():
+    assert ti.spanish({'name': 'El comisario Montalbano s1E02.mkv'}, head='Idioma original: Italiano')
+    d = ti.describe({'name': '13_T1_C1.mp4', 'caption': '2x13  Definitivamente Miami'})
+    assert (d['season'], d['episode']) == (2, 13)
+    movie = ti.describe_full({'tema': 'Películas', 'name': 'Strangers Capítulo 1 (2024).mp4', 'caption': '', 'head': {}})
+    assert movie['title'].startswith('Strangers') and movie['year'] == 2024
+    assert ti.describe_full({'tema': 'Películas', 'name': '65 (2023).mp4', 'caption': '', 'head': {'title': 'Idioma'}})['title'] == '65'
+    assert not ti._same('Dark', 'Jefes dark') and ti._same('Twisted Metal', 'Twisted Metal [Temporada 1]')
+    padre = {'Padre no hay más que uno 2': [{'id': 1, 'title': 'Padre no hay más que uno', 'release_date': '2019-07-26'},
+                                             {'id': 2, 'title': 'Padre no hay más que uno 2: la llegada de la suegra',
+                                              'release_date': '2020-08-28'}]}
+    assert ti.find_movie(lambda k, q, y: padre.get(q, []), 'Padre no hay más que uno 2', None, 2020)['id'] == 2

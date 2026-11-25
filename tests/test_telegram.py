@@ -90,4 +90,20 @@ def test_new_videos_stop_at_what_is_known():
         return pages[cursor]
     got = tg.new_videos(fetch, 'http://x/t1', -100, since=20)
     assert [i['msg_id'] for i in got] == [30, 29, 28] and asked == [None, 'c1']
-    assert 'chats=-100' in tg.media_url('http://x/t1', -100) and 'kind=video' in tg.media_url('http://x/t1', -100)
+    assert 'chats=-100' in tg.media_url('http://x/t1', -100) and 'kind=all' in tg.media_url('http://x/t1', -100)
+
+
+def test_split_movies_play_as_one(tmp_path):
+    path = _db(tmp_path)
+    db = sqlite3.connect(path)
+    db.executescript("CREATE TABLE partes (msg INTEGER PRIMARY KEY, primera INTEGER, numero INTEGER);"
+                     "INSERT INTO pelis VALUES (55, 30, '1080p', 1000);"
+                     "INSERT INTO partes VALUES (30, 30, 1), (31, 30, 2);")
+    db.commit()
+    db.close()
+    v = tg.versions(path, 'peliculas', '55')
+    assert v == [{'msg': 30, 'quality': '1080p', 'size': 1000, 'parts': [30, 31]}]
+    b = tg.base('k')
+    assert tg.play_target(b, -100, v[0]) == 'stack://%s , %s' % (tg.stream_url(b, -100, 30), tg.stream_url(b, -100, 31))
+    assert tg.play_target(b, -100, {'msg': 9}) == tg.stream_url(b, -100, 9)
+    assert 'parts' not in tg.versions(path, 'peliculas', '99')[0]
