@@ -139,6 +139,48 @@ def _text(video):
     return ('%s %s' % (video.get('name') or '', video.get('caption') or '')).replace('_', ' ')
 
 
+def probe_resolution(head):
+    """(ancho, alto) leídos de los primeros bytes de un vídeo, o None. MKV: los campos PixelWidth (B0) y PixelHeight
+    (BA) de la pista de vídeo; AVI: la cabecera «avih»; MP4: la caja «tkhd» (si el índice va al principio)."""
+    import struct
+    data = bytes(head or b'')
+    if data[:4] == b'\x1a\x45\xdf\xa3':  # MKV / WebM
+        start = data.find(b'\xe0')  # Video
+        while start != -1:
+            w = _ebml_uint(data, start, 0xB0)
+            h = _ebml_uint(data, start, 0xBA)
+            if w and h:
+                return w, h
+            start = data.find(b'\xe0', start + 1)
+        return None
+    if data[:4] == b'RIFF' and data[8:12] == b'AVI ':
+        at = data.find(b'avih')
+        if at != -1 and len(data) >= at + 48:
+            w, h = struct.unpack('<II', data[at + 40:at + 48])
+            return (w, h) if 0 < w < 10000 and 0 < h < 10000 else None
+        return None
+    at = data.find(b'tkhd')
+    while at != -1 and len(data) >= at + 84:
+        w, h = struct.unpack('>II', data[at + 76:at + 84])
+        if w >> 16 and h >> 16:
+            return w >> 16, h >> 16
+        at = data.find(b'tkhd', at + 4)
+    return None
+
+
+def _ebml_uint(data, start, element, window=200):
+    """El valor del elemento EBML de un byte de id (element) en los window bytes siguientes a start."""
+    i = start + 1
+    end = min(len(data), start + window)
+    while i < end - 2:
+        if data[i] == element and data[i + 1] & 0x80:  # tamaño de un byte (0x81 = 1 byte, 0x82 = 2…)
+            size = data[i + 1] & 0x7F
+            if 1 <= size <= 4 and i + 2 + size <= len(data):
+                return int.from_bytes(data[i + 2:i + 2 + size], 'big')
+        i += 1
+    return None
+
+
 def quality(video):
     """'4K', '1080p', '720p', 'SD' o '?' (no se sabe): la resolución real; si no la hay, la que diga el nombre."""
     found = resolution(video.get('width'), video.get('height'))

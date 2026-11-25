@@ -642,6 +642,16 @@ def _tmdb_search(key):
     return search
 
 
+def _head_bytes(url, size=64 * 1024):
+    from urllib.request import Request, urlopen
+    try:
+        with urlopen(Request(url, headers={'Range': 'bytes=0-%d' % (size - 1)}), timeout=60) as r:
+            return r.read(size)
+    except Exception as exc:
+        log('Telegram cabecera: %s' % type(exc).__name__)
+        return b''
+
+
 def telegram_update(force=False):
     """Añade al catálogo (telegram.db) lo subido al grupo desde la última vez: una vez al día, de madrugada (o ya,
     con force). Devuelve un resumen, o None si no tocaba o falta algo (catálogo, sesión de Telegram, clave TMDb)."""
@@ -663,6 +673,11 @@ def telegram_update(force=False):
         temas = telegram_idx.topics(db)
         rows = [telegram_idx.from_addon(i, temas) for i in items]
         videos = telegram_idx.with_headers(rows)  # cada vídeo con lo que dice su carátula
+        for v in videos:  # la resolución que Telegram no dice (.mkv, .avi), de los primeros 64 KB
+            if v.get('tema') in ('Películas', 'Series') and not (v.get('width') and v.get('height')):
+                found = telegram_idx.probe_resolution(_head_bytes(telegram.stream_url(telegram.base(token), peer, v['id'])))
+                if found:
+                    v['width'], v['height'] = found
         found = telegram_idx.catalogue(videos, _tmdb_search(key))
         telegram_idx.store(db, found, max([since] + [r['id'] for r in rows]), peer)
         db.execute("INSERT OR REPLACE INTO estado VALUES ('actualizado', ?)", (time.strftime('%Y-%m-%d'),))

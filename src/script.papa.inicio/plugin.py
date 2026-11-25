@@ -600,8 +600,9 @@ def reproducir(handle, p):
             return play(found[0]['url'], 'pelis')
     direct = _telegram_link(tg) if tg else None  # lo que no tienen Torrentio/PeLiS (o sin AllDebrid)
     if direct:
-        if resolver and tio and not telegram.has_hd(tg[2]):  # la próxima vez, en 1080p desde AllDebrid
-            _prepare(resolver, tio[0]['btih'], title)
+        if not telegram.has_hd(tg[2]):  # que se sepa por qué se ve peor; y la próxima vez, en 1080p si se puede
+            better = bool(resolver and tio) and _prepare(resolver, tio[0]['btih'], title)
+            ks.notify(telegram.low_quality_notice(title, tg[2][0].get('quality'), better), 8000)
         return play(direct, 'telegram')
 
     intentos = _json(ks.INTENTOS, {})

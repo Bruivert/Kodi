@@ -318,3 +318,15 @@ def test_short_title_that_tmdb_continues():
     ong = [{'id': 9316, 'title': 'Ong Bak: El guerrero Muay Thai', 'original_title': 'องค์บาก', 'release_date': '2003-01-31'}]
     assert ti.find_movie(lambda k, q, y: ong if q == 'Ong Bak' else [], 'Ong Bak', None, 2003)['id'] == 9316
     assert ti.match_movie('Amal', 2023, [{'id': 3, 'title': 'Amalur', 'release_date': '2023-01-01'}], loose=True) is None
+
+
+def test_resolution_from_the_first_bytes():
+    import struct
+    mkv = b'\x1a\x45\xdf\xa3' + b'\x00' * 40 + b'\xe0\x88' + b'\xb0\x82' + struct.pack('>H', 1920) + b'\xba\x82' + struct.pack('>H', 800)
+    assert ti.probe_resolution(mkv) == (1920, 800)
+    avih = b'avih' + struct.pack('<I', 56) + b'\x00' * 32 + struct.pack('<II', 720, 304)
+    avi = b'RIFF' + b'\x00' * 4 + b'AVI ' + b'LIST' + b'\x00' * 8 + avih + b'\x00' * 20
+    assert ti.probe_resolution(avi) == (720, 304)
+    tkhd = b'tkhd' + b'\x00' * 72 + struct.pack('>II', 1280 << 16, 720 << 16)
+    assert ti.probe_resolution(b'\x00\x00\x00\x20ftypisom' + tkhd) == (1280, 720)
+    assert ti.probe_resolution(b'nada') is None and ti.probe_resolution(None) is None

@@ -33,6 +33,13 @@ def has_hd(found):
     return any(v.get('quality') in HD for v in found or [])
 
 
+def low_quality_notice(title, quality, preparing):
+    """El aviso cuando lo único que hay es una versión de menos de 1080p del grupo."""
+    label = quality if quality in ('720p', 'SD') else 'menos de 1080p'
+    return '«%s» en %s: no hay en 1080p%s' % (title, label, ' (se prepara en 1080p para la próxima vez)'
+                                              if preparing else '')
+
+
 def base(token, port=PORT):
     return 'http://127.0.0.1:%d/t%s' % (port, token)
 
@@ -103,14 +110,16 @@ def versions(path, kind, tmdb, season=None, episode=None):
 def newest(path, kind, limit=NEWEST, since=None):
     """Lo último que se ha subido al grupo, sin repetir título (since: solo de ese año en adelante), en la forma de
     un resultado de TMDb (lo que espera lupa.to_items: póster, fondo, sinopsis…). Los mensajes de Telegram van
-    numerados por orden de subida."""
+    numerados por orden de subida. Las filas son el escaparate: solo títulos con alguna versión de 1080p o más
+    (desde que se conoce la calidad real, 25/11/2026: el 23 % de las películas del grupo es SD)."""
     db = _open(path)
     if not db:
         return []
     table, tipo = ('capitulos', 'series') if kind == 'series' else ('pelis', 'peliculas')
     try:
         rows = db.execute('SELECT t.tmdb, t.titulo, t.año, t.poster, t.fondo, t.sinopsis, t.nota FROM titulos t '
-                          'JOIN (SELECT tmdb, MAX(msg) AS ultimo FROM %s GROUP BY tmdb) v ON v.tmdb = t.tmdb '
+                          "JOIN (SELECT tmdb, MAX(msg) AS ultimo FROM %s WHERE calidad IN ('1080p', '4K') GROUP BY tmdb) v "
+                          'ON v.tmdb = t.tmdb '
                           'WHERE t.tipo = ? AND t.año >= ? ORDER BY v.ultimo DESC LIMIT ?' % table,
                           (tipo, since or 0, limit)).fetchall()
     except sqlite3.Error:
