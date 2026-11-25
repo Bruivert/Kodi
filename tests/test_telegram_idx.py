@@ -150,3 +150,87 @@ def test_catalogue_and_store(tmp_path):
     assert db.execute('SELECT COUNT(*) FROM pelis').fetchone()[0] == 1
     assert db.execute("SELECT titulo, año FROM titulos WHERE tipo = 'series'").fetchone() == ('Reacher', 2022)
     assert ti.last_msg(db) == 13 and ti.topics(db) == {11: 'Películas'}
+
+
+def test_names_recovered_in_the_second_review():
+    assert _p('1x04 - Maniac (2018) [x265].mkv')[1:] == (2018, 1, 4) and ti.parse('1x04 - Maniac (2018)')['after'] == 'Maniac'
+    assert _p('esta-abuela-es-un-peligro-3-2011-720p.mp4')[:2] == ('esta abuela es un peligro 3', 2011)
+    assert _p('Los expertos (Dave Thomas, 1989) [·Comedia·Es].mkv')[:2] == ('Los expertos', 1989)
+    assert _p('El_asesinato_de_un_corredor_de_apuestas_chino_1976by Erpiyo.mkv')[:2] == \
+        ('El asesinato de un corredor de apuestas chino', 1976)
+    assert _p('😒De Perdidos a Río ⟬2023⟭\n💿╮Idioma➡️Castellano')[:2] == ('De Perdidos a Río', 2023)
+    assert _p('Título: El vendedor de sueños.\nAño: 2016')[0] == 'El vendedor de sueños'
+    assert _p('[pencototal] Servant_S01E01_Reborn.mp4')[0] == 'Servant'
+    assert _p('HystrS01E05.mp4')[2:] == (1, 5) and _p('gnt ncubrt S0104 mp4')[2:] == (1, 4)
+    assert _p('Sweet Home \nT3C8') == ('Sweet Home', None, 3, 8)
+    assert _p('El aprendiz de Sumo 1𝒙3')[2:] == (1, 3)
+    assert _p('CSI Vegas Temporada 2 Cap 2x01.mp4')[0] == 'CSI Vegas'
+    assert ti.names('01 - Harry Potter y La Piedra Filosofal')[-1] == 'Harry Potter y La Piedra Filosofal'
+    assert 'Ocho apellidos marroquís' in ti.names('z Ocho apellidos marroquís')
+    assert 'Spectre' in ti.names('26 - 007 - Spectre')
+    assert ti.plain('Key & Peele') == ti.plain('Key and Peele') == 'key y peele'
+
+
+def test_contained_titles_need_the_year_for_movies():
+    r = [{'id': 3, 'title': 'Leyenda urbana 3: La maldición de Mary', 'original_title': 'Urban Legends: Bloody Mary',
+          'release_date': '2005-07-19'}]
+    assert ti.match_movie('Leyenda urbana 3 Bloody Mary', 2005, r) is None  # ninguno contiene al otro
+    r2 = [{'id': 4, 'title': 'Allí me encontrarás', 'original_title': 'Finding You', 'release_date': '2021-05-14'}]
+    assert ti.match_movie('Alli me encontraras Finding You', 2021, r2) is None  # estricto
+    assert ti.match_movie('Alli me encontraras Finding You', 2021, r2, loose=True)['id'] == 4
+    assert ti.match_movie('Alli me encontraras Finding You', 2015, r2, loose=True) is None
+    orwell = [{'id': 5, 'title': 'Good Morning, Mr. Orwell', 'release_date': '1984-01-01'}]
+    assert ti.match_movie('Orwell 1984', 1984, orwell, loose=True) is None  # una palabra suelta no basta
+
+
+def test_clear_matches_win_over_contained_ones():
+    def search(kind, q, y):
+        return {'El Protector': [{'id': 1285, 'title': 'Torrente 3: El protector', 'release_date': '2005-09-30'},
+                                 {'id': 9, 'title': 'El Protector', 'release_date': '2004-01-01'}]}.get(q, [])
+    assert ti.find_movie(search, 'Torrente III - El Protector', None, 2005)['id'] == 1285
+    assert '1999' not in ti.names('1999 - Muertos de risa') and 'LA PELÍCULA' not in ti.names('El lobo (LA PELÍCULA)')
+
+
+def test_series_aliases_and_shorter_tmdb_names():
+    def search(kind, q, y):
+        return {'Law & Order: Special Victims Unit': [{'id': 2734, 'name': 'Ley y orden: Unidad de Víctimas Especiales',
+                                                       'original_name': 'Law & Order: Special Victims Unit'}],
+                'Mentes Criminales Evolution': [{'id': 4057, 'name': 'Mentes criminales',
+                                                 'original_name': 'Criminal Minds'}]}.get(q, [])
+    assert ti.find_show(search, 'LyOuve', None)['id'] == 2734
+    assert ti.find_show(search, 'Mentes Criminales Evolution', None)['id'] == 4057
+
+
+def test_longer_tmdb_title_only_if_it_starts_the_same():
+    italy = [{'id': 1, 'title': "America's Last Little Italy: The Hill", 'release_date': '2020-01-01'}]
+    assert ti.match_movie('Little Italy', 2021, italy, loose=True) is None
+    padre = [{'id': 2, 'title': 'Padre no hay más que uno 4: Campanas de boda', 'release_date': '2024-07-31'}]
+    assert ti.match_movie('Padre No Hay Más Que Uno 4', 2024, padre, loose=True)['id'] == 2
+    assert _p('ENVIDIA (2019/2023) 🇨🇦 (👅🇪🇸 Castellano)')[:2] == ('ENVIDIA', 2019)
+    nodate = [{'id': 3, 'title': 'La Ballena'}]
+    assert ti.match_movie('La Ballena', None, nodate) is None
+
+
+def test_sequel_numbers_and_years_elsewhere():
+    assert ti.numbers('Viernes 13, 2ª parte') == ti.numbers('Viernes 13 parte 2') == {13, 2}
+    assert ti.numbers('Misión imposible II') == {2} and ti.numbers('1917') == set()
+    v13 = [{'id': 3, 'title': 'Viernes 13, parte III', 'release_date': '1982-08-13'},
+           {'id': 2, 'title': 'Viernes 13, 2ª parte', 'release_date': '1981-04-30'}]
+    assert ti.match_movie('Viernes 13 parte 2', 1981, v13)['id'] == 2
+    assert _p('2015 - Mad Max Furia en la carretera_Px264.mp4')[:2] == ('Mad Max Furia en la carretera', 2015)
+    assert _p('(1992) Una monja de cuidado.mp4')[:2] == ('Una monja de cuidado', 1992)
+    assert _p('SMILE (SONRIE)\n2022\nCastellano')[:2] == ('SMILE (SONRIE)', 2022)
+    assert _p('1917 (2019).mp4')[:2] == ('1917', 2019)
+    guardian = [{'id': 1, 'title': 'El guardián', 'release_date': '2001-06-12'},
+                {'id': 2, 'title': 'The Guardian', 'original_title': 'The Guardian', 'release_date': '2000-01-01'}]
+    assert ti.find_movie(lambda k, q, y: guardian, 'Guardian', None, 2000)['id'] == 2
+
+
+def test_saga_numbers_tmdb_leaves_out_are_fine():
+    piratas = [{'id': 58, 'title': 'Piratas del Caribe: El cofre del hombre muerto', 'release_date': '2006-07-06'}]
+    assert ti.find_movie(lambda k, q, y: piratas if 'cofre' in q.lower() else [],
+                         'Piratas del Caribe 2. El cofre del hombre muerto', None, 2006)['id'] == 58
+    dias = [{'id': 1, 'title': 'Días', 'release_date': '2021-01-01'}, {'id': 2, 'title': '75 días', 'release_date': '2022-01-01'}]
+    assert ti.match_movie('75 Dias', 2021, dias)['id'] == 2
+    assert ti.match_movie('Amal', 2023, [{'id': 3, 'title': 'Amalur', 'release_date': '2023-01-01'}]) is None
+    assert ti.match_movie('Sissi 1', 1955, [{'id': 4, 'title': 'Sissi', 'release_date': '1955-12-21'}])['id'] == 4

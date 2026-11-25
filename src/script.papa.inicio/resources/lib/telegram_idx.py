@@ -12,9 +12,12 @@ import re
 import unicodedata
 
 _EXT = re.compile(r'\.(mkv|mp4|avi|m4v|mov|ts|webm|wmv|mpg)$', re.I)
-_SIGNS = re.compile(r'@\w+|\[by [^\]]*\]|\(by [^)]*\)|\bby erpiyo\b|www\.\S+|\S+\.(?:com|net|org|eu|to)\b', re.I)
+_SIGNS = re.compile(r'@\w+|\[by [^\]]*\]|\(by [^)]*\)|by ?erpiyo\b|by ?runneo\b|www\.\S+|\S+\.(?:com|net|org|eu|to|mx)\b|'
+                    r'^\s*\[[^\]]*\]', re.I)
+_SYMBOLS = re.compile(r'[^\w\s\-.,:;!?¿¡\'"()\[\]&/·+ª]')  # emojis y adornos («😒De Perdidos a Río ⟬2023⟭»)
 _EPISODE = (
-    re.compile(r'\bS(\d{1,2})\s*E(\d{1,3})\b', re.I),                                  # S01E02
+    re.compile(r'(?<!\d)S(\d{1,2})\s*E(\d{1,3})\b', re.I),                             # S01E02, HystrS01E05
+    re.compile(r'\bS(\d{2})(\d{2})\b', re.I),                                          # S0104
     re.compile(r'\b(\d{1,2})\s*x\s*(\d{1,3})\b', re.I),                                # 1x02, 1 x 2
     re.compile(r'\bT(?:emp(?:orada)?)?\.?\s*-?\s*(\d{1,2})\s*[/,.\-]?\s*'
                r'(?:E|C|Cap(?:[ií]tulo)?|Ep(?:isodio)?)\.?\s*-?\s*(\d{1,3})\b', re.I),     # T3 CAPITULO 3, T-8/E-96, T4 C10
@@ -22,10 +25,10 @@ _EPISODE = (
     re.compile(r'\bCap(?:[ií]tulo)?\.?\s*(\d{1,2})(\d{2})\b', re.I),                    # Cap.102 → 1x02
 )
 _LONE_EPISODE = re.compile(r'^(?:Cap(?:[ií]tulo)?|Episodio|Ep)\.?\s*(\d{1,3})\b', re.I)  # «Cap 7» (temporada aparte)
-_YEAR = re.compile(r'(?:^|[(\[\s._\-·,])((?:19[2-9]|20[0-4])\d)(?=$|[)\]\s._\-·,]|(?:web|hd|bd|br|dvd|1080|720)\w*)',
+_YEAR = re.compile(r'(?:^|[(\[\s._\-·,])((?:19[2-9]|20[0-4])\d)(?=$|[)\]\s._\-·,/]|(?:web|hd|bd|br|dvd|1080|720)\w*)',
                    re.I)
 _JUNK = re.compile(r'[\[(]?\b(?:2160p?|1080p?|720p?|480p?|4k|uhd|hdr\d*\+?|dv|bluray|blu-ray|bdrip|brrip|web-?dl|'
-                   r'webrip|hdtv|microhd|hdrip|dvdrip|x26[45]|h\.?26[45]|hevc|avc|castellano|espa[ñn]ol|spanish|'
+                   r'webrip|hdtv|microhd|hdrip|dvdrip|p?x26[45]|h\.?26[45]|hevc|avc|castellano|espa[ñn]ol|spanish|'
                    r'dual|ac3|dts|aac|esp|cast|wolfmax4k|atmos|10bit|full ?hd|nf|amzn|dsnp|hmax)\b.*$', re.I)
 _HD_NAME = re.compile(r'1080|2160|\b4k\b|\buhd\b|full ?hd', re.I)
 _LOW_NAME = re.compile(r'\b(?:720p?|480p?|360p?|sd|hdtv|dvdrip|vhsrip|xvid)\b', re.I)
@@ -35,12 +38,14 @@ _NOT_SPANISH = re.compile(r'\b(?:catal[aà]n?|vose?|v\.o\.s\.e|subtitulad[oa]s?|
 
 def plain(text):
     """Para comparar: sin mayúsculas, tildes ni signos."""
-    text = unicodedata.normalize('NFKD', text or '').encode('ascii', 'ignore').decode().lower()
-    return ' '.join(re.sub(r'[^a-z0-9]+', ' ', text).split())
+    text = unicodedata.normalize('NFKD', text or '').encode('ascii', 'ignore').decode().lower().replace('&', ' y ')
+    return ' '.join('y' if w == 'and' else w for w in re.sub(r'[^a-z0-9]+', ' ', text).split())
 
 
 def _tidy(text):
     text = _JUNK.sub('', text)
+    text = re.sub(r'[\s\-]*\bTemp(?:orada)?\.?\s*\d+\b.*$', '', text, flags=re.I)
+    text = re.sub(r'\s*\([^)]*$', '', text)
     text = re.sub(r'[._]+', ' ', text)
     text = re.sub(r'\s+', ' ', text)
     return re.sub(r'^[\s\-–|:\])]+|[\s\-–|:\[(]+$', '', text).strip()
@@ -48,10 +53,17 @@ def _tidy(text):
 
 def parse(text):
     """{title, year, season, episode} de un nombre de fichero o un texto de mensaje (title None si no hay)."""
-    line = next((l.strip() for l in (text or '').splitlines() if l.strip()), '')
-    line = _SIGNS.sub(' ', _EXT.sub('', line)).replace('_', ' ')
-    line = re.sub(r'^\s*ver\s+', '', line, flags=re.I)  # «Ver La caída de la Casa Usher»
+    lines = [l.strip() for l in unicodedata.normalize('NFKC', text or '').splitlines() if l.strip()]
+    line = lines[0] if lines else ''
+    line = re.sub(r'[⟬〔【]', '(', re.sub(r'[⟭〕】]', ')', line))
+    line = _SYMBOLS.sub(' ', _SIGNS.sub(' ', _EXT.sub('', line))).replace('_', ' ')
+    if ' ' not in line.strip() and line.count('-') >= 2:  # «esta-abuela-es-un-peligro-3-2011-720p»
+        line = line.replace('-', ' ')
+    line = re.sub(r'^\s*(?:ver|t[ií]tulo\s*:)\s+', '', line, flags=re.I)  # «Ver La caída…», «Título: …»
     out = {'title': None, 'year': None, 'season': None, 'episode': None}
+    lead = re.match(r'^\s*\(?((?:19[2-9]|20[0-4])\d)\)?\s*[-–.]?\s+(?=\D)', line)  # «2015 - Mad Max…», «(1992) Una monja…»
+    if lead and re.match(r'^\s*\(|^\s*\d{4}\s*[-–.]', line):
+        out['year'], line = int(lead.group(1)), line[lead.end():]
     for pattern in _EPISODE:
         found = pattern.search(line)
         if found:
@@ -59,18 +71,32 @@ def parse(text):
             before, after = line[:found.start()], line[found.end():]
             before_t, after_t = _tidy(before), _tidy(re.sub(r'^\s*[-–|:]\s*', '', after))
             line = before_t if len(plain(before_t)) >= 2 else ''
-            if not line and after_t and _YEAR.search(' ' + after_t) is None:
-                out['after'] = after_t  # «1x06 - Snowpiercer»: puede ser la serie o el título del capítulo
+            if not line and after_t:
+                year = _YEAR.search(' ' + after_t)
+                if year:  # «1x04 - Maniac (2018)»: la serie, con su año
+                    after_t, out['year'] = _tidy(after_t[:max(0, year.start() - 1)]), int(year.group(1))
+                if len(plain(after_t)) >= 2:
+                    out['after'] = after_t  # «1x06 - Snowpiercer»: puede ser la serie o el título del capítulo
             break
     else:
         lone = _LONE_EPISODE.search(line)
         if lone:
             out['episode'] = int(lone.group(1))
             line = ''
+        else:  # el capítulo en otra línea del mensaje («Sweet Home» / «T3C8»)
+            for other in lines[1:4]:
+                found = next((m for m in (p.search(other) for p in _EPISODE) if m), None)
+                if found:
+                    out['season'], out['episode'] = int(found.group(1)), int(found.group(2))
+                    break
     year = _YEAR.search(line)
     if year and year.start() > 0:
         out['year'] = int(year.group(1))
         line = line[:year.start()]
+    if out['year'] is None:  # «SMILE (SONRIE)» / «2022» en la línea siguiente
+        alone = next((m for m in (re.fullmatch(r'\(?((?:19[2-9]|20[0-4])\d)\)?', l.strip()) for l in lines[1:3]) if m), None)
+        if alone:
+            out['year'] = int(alone.group(1))
     title = _tidy(line)
     out['title'] = title if len(plain(title)) >= 2 else None
     return out
@@ -155,22 +181,56 @@ def _looks_like_episode_title(info, other):
         plain(other['title']) != plain(info['title'])
 
 
+_ROMAN = {'ii': 2, 'iii': 3, 'iv': 4, 'v': 5, 'vi': 6, 'vii': 7, 'viii': 8, 'ix': 9, 'x': 10}
+
+
+def numbers(text):
+    """Los números de un título (secuelas: «2», «II», «2ª»), sin los años: «Viernes 13 parte 2» → {13, 2}."""
+    out = set()
+    for word in plain(text).split():
+        digits = re.fullmatch(r'(\d+)(?:a|o|st|nd|rd|th)?', word)
+        if digits and not re.fullmatch(r'(?:19|20)\d\d', digits.group(1)):
+            out.add(int(digits.group(1)))
+        elif word in _ROMAN:
+            out.add(_ROMAN[word])
+    return out
+
+
+def _same_numbers(a, b):
+    """Los números de secuela no se contradicen: solo cuenta si los dos títulos llevan («Piratas del Caribe 2» →
+    «Piratas del Caribe: El cofre…» vale; «parte 2» → «parte III», no)."""
+    x, y = numbers(a), numbers(b)
+    return not x or not y or x == y
+
+
 def similar(a, b):
     return difflib.SequenceMatcher(None, plain(a), plain(b)).ratio()
 
 
-def match_movie(title, year, results):
+def match_movie(title, year, results, loose=False):
     """El resultado de TMDb que es esta película, o None si hay dudas. Con año: título parecido (≥ 0,8) y año ±1.
-    Sin año: el título exacto; si hay varios, solo si uno es mucho más conocido (5 veces más votos)."""
+    Sin año: el título exacto; si hay varios, solo si uno es mucho más conocido (5 veces más votos).
+    Los números de secuela tienen que coincidir.
+    loose (solo con año): también vale que un título contenga entero al otro («Alli me encontraras Finding You» →
+    «Allí me encontrarás»), si el más corto tiene al menos 2 palabras o 8 letras."""
     best, exact = None, []
     for r in results or []:
         names = [r.get('title') or '', r.get('original_title') or '']
+        if not any(_same_numbers(title, n) for n in names if n):
+            continue  # «Viernes 13 parte 2» no es «Viernes 13, parte III»
         score = max(similar(title, n) for n in names)
+        bare = lambda t: ' '.join(w for w in plain(t).split() if not w.isdigit() and w not in _ROMAN)  # noqa: E731
+        if len(plain(title)) < 8 and max(similar(bare(title), bare(n)) for n in names) < 0.9:
+            continue  # títulos cortos: «Amal» no es «Amalur» («Sissi 1» sí es «Sissi»)
         ryear = int((r.get('release_date') or '0000')[:4] or 0)
         if year:
-            if score >= 0.8 and abs(ryear - year) <= 1 and (best is None or score > best[0]):
-                best = (score, r)
-        elif score == 1.0:
+            if loose and score < 0.8 and any(_contains(title, n, 6) or _starts(n, title) for n in names if n):
+                score = 0.79
+            rank = (numbers(title) == max((numbers(n) for n in names), key=len), ryear == year, score)  # «75 días»
+            # antes que «Días»; el del año exacto antes que uno muy parecido de un año más o menos
+            if score >= (0.79 if loose else 0.8) and abs(ryear - year) <= 1 and (best is None or rank > best[0]):
+                best = (rank, r)
+        elif score == 1.0 and not loose and r.get('release_date'):
             exact.append(r)
     if year:
         return best[1] if best else None
@@ -181,19 +241,37 @@ def match_movie(title, year, results):
 
 
 _NOT_TITLES = {'corto', 'cortometraje', 'hd', 'castellano', 'espanol', 'version extendida', 'extendida',
-               'remasterizada', 'documental', 'serie', 'miniserie', 'fin', 'final'}
+               'remasterizada', 'documental', 'serie', 'miniserie', 'fin', 'final', 'la pelicula', 'pelicula',
+               'the movie', 'el musical'}
 
 
-def names(title):
-    """Formas de buscar un título: tal cual, sin lo de los paréntesis y lo de los paréntesis
-    («Amor Cruel (Cruel Love)» → «Amor Cruel», «Cruel Love»)."""
+def names(title, partial=True):
+    """Formas de buscar un título: tal cual, sin lo de los paréntesis y lo de los paréntesis («Amor Cruel (Cruel Love)»
+    → «Amor Cruel», «Cruel Love»), sin numeración delante («01 - Harry Potter…», «z Ocho apellidos…») y cada parte
+    separada por « - ». Cada forma se comprueba luego contra TMDb, así que probar de más no mete errores."""
     out = [title]
     inside = [t for t in re.findall(r'\(([^)]{3,})\)', title or '') if plain(t) not in _NOT_TITLES]
     outside = _tidy(re.sub(r'\([^)]*\)?', ' ', title or ''))
-    for name in [outside] + inside:
+    unnumbered = re.sub(r'^(?:\d{1,2}\s*-?\s+|z\s+)(?=[^\W\d])', '', outside or '', flags=re.I)
+    pieces = re.split(r'\s+-\s+', unnumbered)
+    parts = [p.strip() for p in pieces if len(plain(p)) >= 3 and not plain(p).isdigit() and plain(p) not in _NOT_TITLES]
+    more = inside + [unnumbered] + (parts if len(pieces) > 1 else []) if partial else [unnumbered]
+    for name in [outside] + more:
         if name and len(plain(name)) >= 2 and name not in out:
             out.append(name)
     return out
+
+
+def _starts(longer, shorter):
+    """¿El título de TMDb (longer) empieza por el buscado? («Padre no hay más que uno 4» → «… 4: Campanas de boda»)."""
+    a, b = plain(longer), plain(shorter)
+    return len(b) >= 6 and (' ' in b or len(b) >= 8) and a != b and a.startswith(b + ' ')
+
+
+def _contains(longer, shorter, minimum):
+    """¿shorter está entero (palabras completas) dentro de longer? shorter: al menos 2 palabras o 8 letras."""
+    a, b = plain(longer), plain(shorter)
+    return len(b) >= minimum and (' ' in b or len(b) >= 8) and a != b and (' %s ' % b) in (' %s ' % a)
 
 
 def match_show(title, results):
@@ -208,6 +286,8 @@ def match_show(title, results):
     if first and len(wanted) >= 6 and any(
             wanted in plain(first.get(k) or '').replace(' and ', ' y ') for k in ('name', 'original_name')):
         return first
+    if first and any(_contains(title, first.get(k) or '', 8) for k in ('name', 'original_name')):
+        return first  # «Mentes Criminales Evolution» → «Mentes criminales», «El detective Endeavour» → «Endeavour»
     return None
 
 
@@ -252,17 +332,45 @@ def from_addon(item, topics):
 
 
 def find_movie(search, title, alt, year):
-    """search(kind, query, year) → resultados de TMDb. El resultado que es esta película, o None."""
-    for name in [n for t in (title, alt) if t for n in names(t)]:
+    """search(kind, query, year) → resultados de TMDb. El resultado que es esta película, o None. Se prueban todas las
+    formas del nombre y, de lo encontrado, gana lo que más se parece al título completo («Torrente III - El
+    Protector»: la parte «El Protector» encuentra «El Protector» (2004) y «Torrente 3: El protector»; gana esta).
+    Solo si no hay ninguna coincidencia clara, «un título contiene al otro» (con el título tal cual y el año)."""
+    found, full = [], [t for t in (title, alt) if t]
+    for name in [n for t in full for n in names(t, partial=bool(year))]:  # sin año, ni trozos ni paréntesis
         for y in ([year, None] if year else [None]):
-            found = match_movie(name, year, search('movie', name, y))
-            if found:
-                return found
+            results = search('movie', name, y)
+            for r in [match_movie(n, year, results) for n in [name] + full]:  # lo hallado se mide también
+                if r and r['id'] not in [f['id'] for f in found]:            # contra el título completo
+                    found.append(r)
+    if found:
+        return max(found, key=lambda r: (any(numbers(t) and numbers(t) == numbers(r.get(k) or '') for t in full
+                                             for k in ('title', 'original_title')),
+                                         bool(year) and (r.get('release_date') or '')[:4] == str(year),
+                                         max(similar(t, r.get(k) or '') for t in full
+                                             for k in ('title', 'original_title'))))
+    if year:
+        for name in [t for t in (title, alt) if t]:
+            for y in (year, None):
+                r = match_movie(name, year, search('movie', name, y), loose=True)
+                if r:
+                    return r
     return None
 
 
+# Series que el grupo sube con el nombre abreviado a propósito (24/11/2026): nombre leído (plain) → búsqueda en TMDb
+ALIASES = {'csi lv': 'CSI: Crime Scene Investigation', 'l3yord3nuve': 'Law & Order: Special Victims Unit',
+           'lyouve': 'Law & Order: Special Victims Unit', 'ley y orden uve': 'Law & Order: Special Victims Unit',
+           'ccavm': 'How I Met Your Mother', 'aoshield': "Marvel's Agents of S.H.I.E.L.D.",
+           'tmithcastle': 'The Man in the High Castle', 'tdetective': 'True Detective', 'sobrenatural': 'Supernatural',
+           'sw andor': 'Andor', 'star wars andor': 'Andor', 'halo la serie': 'Halo',
+           'instituto mckinley': 'Freaks and Geeks', 'las brujas de e e': 'Witches of East End',
+           'twin peaks el regreso': 'Twin Peaks'}
+
+
 def find_show(search, title, alt):
-    for name in [n for t in (title, alt) if t for n in names(t)]:
+    for name in [ALIASES[plain(t)] for t in (title, alt) if t and plain(t) in ALIASES] + \
+            [n for t in (title, alt) if t for n in names(t)]:
         found = match_show(name, search('tv', name, None))
         if found:
             return found
